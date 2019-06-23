@@ -103,7 +103,7 @@ void ssd1306_draw_pixel(ssd1306_display_t *display, int x, int y)
 
 int ssd1306_init_static(
   ssd1306_display_t *display,
-  int cs, int clk, int mosi, int miso,
+  int cs, int clk, int mosi,
   int dc, int rst,
   int spi_speed
   )
@@ -121,7 +121,7 @@ int ssd1306_init_static(
     gpio_set_direction(rst, GPIO_MODE_OUTPUT);
 
     spi_bus_config_t buscfg={
-        .miso_io_num=miso,
+        .miso_io_num=-1,
         .mosi_io_num=mosi,
         .sclk_io_num=clk,
         .quadwp_io_num=-1,
@@ -137,7 +137,7 @@ int ssd1306_init_static(
     };
 
     //Initialize the SPI bus
-    ret=spi_bus_initialize(HSPI_HOST, &buscfg, 1);
+    ret = spi_bus_initialize(HSPI_HOST, &buscfg, 1);
     ESP_ERROR_CHECK(ret);
     //Attach the LCD to the SPI bus
     ret=spi_bus_add_device(HSPI_HOST, &devcfg, &display->spi);
