@@ -1,0 +1,20 @@
+* ESP32 Snippets
+
+This repo contains my ESP32 snippets. It's set up as a
+=component=. Please check the official ESP32 SDK documentation for details.
+
+** Quickstart
+
+In your ESP32 project create a subdirectory =components=. GIT clone this
+repository in there (either directly, or better as submodule).
+
+Then the code should be available.
+
+** Using U8G2
+
+The amazining [[https://github.com/olikraus/u8g2/wiki][U8G2]] library for monochrome OLEDs needs a HAL. I
+pilfered the HAL code from [[https://github.com/nkolban/esp32-snippets/][NKolban]]. His code is clearly marked and
+APACHE2 licensed.
+
+To use the U8G2 just clone the repository into the =components=
+directory.
