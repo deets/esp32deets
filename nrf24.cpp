@@ -31,22 +31,6 @@ typedef struct {
 #define START_LISTENING_TIMEOUT_US 130
 #define TX_SWITCH_DELAY_US (START_LISTENING_TIMEOUT_US + 50)
 
-// nRF24L01+ registers
-#define CONFIG      0x00
-#define EN_AA       0x01
-#define EN_RXADDR   0x02
-#define SETUP_AW    0x03
-#define SETUP_RETR  0x04
-#define RF_CH       0x05
-#define RF_SETUP    0x06
-#define STATUS      0x07
-#define OBSERVE_TX  0x08
-#define RX_ADDR_P0  0x0a
-#define TX_ADDR     0x10
-#define RX_PW_P0    0x11
-#define FIFO_STATUS 0x17
-#define DYNPD	    0x1c
-
 // CONFIG register
 #define EN_CRC      0x08
 #define CRCO        0x04
@@ -237,14 +221,14 @@ static void nrf24_reg_read_bytes(uint8_t reg, uint8_t* buf, size_t len)
 
 void nrf24_set_power_speed(uint8_t power, uint8_t speed)
 {
-  uint8_t setup = nrf24_reg_read(RF_SETUP) & 0b11010001;
-  nrf24_reg_write(RF_SETUP, setup | power | speed);
+  uint8_t setup = nrf24_reg_read(NRF24_RF_SETUP) & 0b11010001;
+  nrf24_reg_write(NRF24_RF_SETUP, setup | power | speed);
 }
 
 
 void nrf24_set_crc(uint8_t crc_length)
 {
-  uint8_t config = nrf24_reg_read(CONFIG) & ~(CRCO | EN_CRC);
+  uint8_t config = nrf24_reg_read(NRF24_CONFIG) & ~(CRCO | EN_CRC);
   switch(crc_length)
   {
   case 0:
@@ -258,7 +242,7 @@ void nrf24_set_crc(uint8_t crc_length)
   default:
     assert(0);
   }
-  nrf24_reg_write(CONFIG, config);
+  nrf24_reg_write(NRF24_CONFIG, config);
 }
 
 
@@ -268,7 +252,7 @@ void nrf24_set_channel(uint8_t channel)
   {
     channel = 125;
   }
-  nrf24_reg_write(RF_CH, channel);
+  nrf24_reg_write(NRF24_RF_CH, channel);
 }
 
 
@@ -303,7 +287,7 @@ static void nrf24_send_start(const uint8_t* payload, int payload_size)
   esp_err_t res;
   assert(payload_size >= 1 && payload_size <= PAYLOAD_SIZE);
 
-  nrf24_reg_write(CONFIG, (nrf24_reg_read(CONFIG) | PWR_UP) & ~PRIM_RX);
+  nrf24_reg_write(NRF24_CONFIG, (nrf24_reg_read(NRF24_CONFIG) | PWR_UP) & ~PRIM_RX);
 
   nrf->tx_work_buffer[0] = W_TX_PAYLOAD;
   for(size_t i=0; i < payload_size; ++i)
@@ -335,13 +319,13 @@ void nrf24_dump_pipe_addresses()
 {
   uint8_t buffer[5];
   memset(buffer, 0, 5);
-  nrf24_reg_read_bytes(TX_ADDR, buffer, 5);
+  nrf24_reg_read_bytes(NRF24_TX_ADDR, buffer, 5);
   printf("tx: %s\n", buffer);
   memset(buffer, 0, 5);
-  nrf24_reg_read_bytes(RX_ADDR_P0, buffer, 5);
+  nrf24_reg_read_bytes(NRF24_RX_ADDR_P0, buffer, 5);
   printf("p0: %s\n", buffer);
   memset(buffer, 0, 5);
-  nrf24_reg_read_bytes(RX_ADDR_P0 + 1, buffer, 5);
+  nrf24_reg_read_bytes(NRF24_RX_ADDR_P0 + 1, buffer, 5);
   printf("p1: %s\n", buffer);
 }
 
@@ -407,14 +391,14 @@ int nrf24_setup(const char local_address[5])
   SPI_ERROR_CHECK;
 
   // from here on, the __init__ of nrf24l01.py is lifted
-  nrf24_reg_write(SETUP_AW, 0b11);
-  if(nrf24_reg_read(SETUP_AW) == 0b11)
+  nrf24_reg_write(NRF24_SETUP_AW, 0b11);
+  if(nrf24_reg_read(NRF24_SETUP_AW) == 0b11)
   {
-    nrf24_reg_write(DYNPD, 0);
-    nrf24_reg_write(SETUP_RETR, (RETRY_PAUSE << 4) | RETRIES);
+    nrf24_reg_write(NRF24_DYNPD, 0);
+    nrf24_reg_write(NRF24_SETUP_RETR, (RETRY_PAUSE << 4) | RETRIES);
     nrf24_set_power_speed(POWER_3, SPEED_2M);
     nrf24_set_crc(2);
-    nrf24_reg_write(STATUS, RX_DR | TX_DS | MAX_RT);
+    nrf24_reg_write(NRF24_STATUS, RX_DR | TX_DS | MAX_RT);
     nrf24_set_channel(CHANNEL);
     nrf24_flush_rx();
     nrf24_flush_tx();
@@ -444,8 +428,8 @@ void nrf24_teardown()
 void nrf24_start_listening()
 {
   assert(nrf);
-  nrf24_reg_write(CONFIG, nrf24_reg_read(CONFIG) | PWR_UP | PRIM_RX);
-  nrf24_reg_write(STATUS, RX_DR | TX_DS | MAX_RT);
+  nrf24_reg_write(NRF24_CONFIG, nrf24_reg_read(NRF24_CONFIG) | PWR_UP | PRIM_RX);
+  nrf24_reg_write(NRF24_STATUS, RX_DR | TX_DS | MAX_RT);
   // TODO: is this necessary?
   /* if self.pipe0_read_addr is not None: */
   /*     self.reg_write_bytes(RX_ADDR_P0, self.pipe0_read_addr) */
@@ -463,7 +447,7 @@ void nrf24_stop_listening()
   assert(nrf);
   nrf24_ce(0);
   nrf24_sending(1);
-  nrf24_reg_write(STATUS, RX_DR | TX_DS | MAX_RT);
+  nrf24_reg_write(NRF24_STATUS, RX_DR | TX_DS | MAX_RT);
   nrf24_flush_rx();
   nrf24_flush_tx();
 }
@@ -472,7 +456,7 @@ void nrf24_stop_listening()
 int nrf24_any()
 {
   assert(nrf);
-  int res = !(nrf24_reg_read(FIFO_STATUS) & RX_EMPTY);
+  int res = !(nrf24_reg_read(NRF24_FIFO_STATUS) & RX_EMPTY);
   //nrf24_dump_pipe_addresses();
   return res;
 }
@@ -481,20 +465,20 @@ int nrf24_any()
 static nrf24_send_error_t nrf24_send_done()
 {
   assert(nrf);
-  if(!(nrf24_reg_read(STATUS) & (TX_DS | MAX_RT)))
+  if(!(nrf24_reg_read(NRF24_STATUS) & (TX_DS | MAX_RT)))
   {
     return NRF24_SEND_ERROR_NONE;
   }
   // either finished or failed: get and clear status flags, power down
-  uint8_t status = nrf24_reg_write(STATUS, RX_DR | TX_DS | MAX_RT);
-  nrf24_reg_write(CONFIG, nrf24_reg_read(CONFIG) & ~PWR_UP);
+  uint8_t status = nrf24_reg_write(NRF24_STATUS, RX_DR | TX_DS | MAX_RT);
+  nrf24_reg_write(NRF24_CONFIG, nrf24_reg_read(NRF24_CONFIG) & ~PWR_UP);
   if(status & TX_DS)
   {
     return NRF24_SEND_ERROR_OK;
   }
   if(status & MAX_RT)
   {
-    uint8_t observe = nrf24_reg_read(OBSERVE_TX);
+    uint8_t observe = nrf24_reg_read(NRF24_OBSERVE_TX);
     if(observe != nrf->error_info.last_observe_tx)
     {
       // we actually have a real MAX_RT reached case
@@ -564,7 +548,7 @@ size_t nrf24_recv(unsigned char* buffer, size_t len)
   t.flags = 0;
   res = spi_device_transmit(nrf->spi, &t);
   ESP_ERROR_CHECK(res);
-  nrf24_reg_write(STATUS, RX_DR);
+  nrf24_reg_write(NRF24_STATUS, RX_DR);
   size_t to_copy = PAYLOAD_SIZE;
   if(buffer)
   {
@@ -579,10 +563,10 @@ void nrf24_open_tx_pipe(const char address[5], int payload_size)
 {
   // This needs to be set to the same address according to
   // the datasheed for auto-ack
-  nrf24_reg_write_bytes(RX_ADDR_P0, (const uint8_t*)address, 5);
-  nrf24_reg_write_bytes(TX_ADDR, (const uint8_t*)address, 5);
-  nrf24_reg_write(RX_PW_P0, payload_size);
-  nrf24_reg_write(EN_RXADDR, nrf24_reg_read(EN_RXADDR) | (1 << 0));
+  nrf24_reg_write_bytes(NRF24_RX_ADDR_P0, (const uint8_t*)address, 5);
+  nrf24_reg_write_bytes(NRF24_TX_ADDR, (const uint8_t*)address, 5);
+  nrf24_reg_write(NRF24_RX_PW_P0, payload_size);
+  nrf24_reg_write(NRF24_EN_RXADDR, nrf24_reg_read(NRF24_EN_RXADDR) | (1 << 0));
 }
 
 
@@ -595,9 +579,9 @@ void nrf24_open_rx_pipe(int pipe_id, const char address[5], int payload_size)
   // is not supposed to be generic.
   // So in sum, pipe_id can only be 1 ;)
   assert(1 <= pipe_id && pipe_id < 2);
-  nrf24_reg_write_bytes(RX_ADDR_P0 + pipe_id, (const uint8_t*)address, 5);
-  nrf24_reg_write(RX_PW_P0 + pipe_id, payload_size);
-  nrf24_reg_write(EN_RXADDR, nrf24_reg_read(EN_RXADDR) | (1 << pipe_id));
+  nrf24_reg_write_bytes(NRF24_RX_ADDR_P0 + pipe_id, (const uint8_t*)address, 5);
+  nrf24_reg_write(NRF24_RX_PW_P0 + pipe_id, payload_size);
+  nrf24_reg_write(NRF24_EN_RXADDR, nrf24_reg_read(NRF24_EN_RXADDR) | (1 << pipe_id));
 }
 
 static int nrf24_wait_for_incoming_or_timeout()
