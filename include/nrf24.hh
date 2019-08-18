@@ -104,6 +104,7 @@ private:
   void send_start(const uint8_t* payload, int payload_size);
   nrf24_send_error_t send_done();
   int wait_for_incoming_or_timeout();
+  void ce(uint8_t value);
 
   spi_device_handle_t _spi;
   uint8_t _tx_work_buffer[NRF24_WORK_BUFFER_SIZE];

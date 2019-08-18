@@ -54,9 +54,6 @@
 #define FLUSH_RX     0xe2
 #define NOP          0xff
 
-
-
-
 namespace {
 
 const size_t PAYLOAD_SIZE=32;
@@ -68,7 +65,6 @@ const gpio_num_t CE = static_cast<gpio_num_t>(19);
 const gpio_num_t MISO = static_cast<gpio_num_t>(22);
 const gpio_num_t MOSI = static_cast<gpio_num_t>(23);
 const gpio_num_t SCK = static_cast<gpio_num_t>(18);
-const gpio_num_t SENDING_DEBUG_PIN = static_cast<gpio_num_t>(13);
 
 class AutoStopListener
 {
@@ -110,21 +106,9 @@ private:
   }
 
 
-static void nrf24_usleep(uint32_t us)
-{
-  ets_delay_us(us);
-}
-
-
-static void nrf24_ce(uint8_t value)
+void NRF24::ce(uint8_t value)
 {
   gpio_set_level(CE, value);
-}
-
-
-static void nrf24_sending(uint8_t value)
-{
-  gpio_set_level(SENDING_DEBUG_PIN, value);
 }
 
 
@@ -303,9 +287,9 @@ void NRF24::send_start(const uint8_t* payload, int payload_size)
   res = spi_device_transmit(_spi, &t);
   ESP_ERROR_CHECK(res);
 
-  nrf24_ce(1);
-  nrf24_usleep(15);  // needs to be >10us to activate transmission
-  nrf24_ce(0);
+  ce(1);
+  ets_delay_us(15);  // needs to be >10us to activate transmission
+  ce(0);
 }
 
 void NRF24::dump_pipe_addresses()
@@ -342,10 +326,6 @@ int NRF24::setup(const char local_address[5])
   gpio_pad_select_gpio(CE);
   gpio_set_level(CE, 0);
   gpio_set_direction(CE, GPIO_MODE_OUTPUT);
-
-  gpio_pad_select_gpio(SENDING_DEBUG_PIN);
-  gpio_set_level(SENDING_DEBUG_PIN, 0);
-  gpio_set_direction(SENDING_DEBUG_PIN, GPIO_MODE_OUTPUT);
 
   spi_bus_config_t buscfg = {
     MOSI, // mosi_io_num
@@ -422,16 +402,14 @@ void NRF24::start_listening()
 
   flush_rx();
   flush_tx();
-  nrf24_ce(1);
-  nrf24_sending(0);
-  nrf24_usleep(START_LISTENING_TIMEOUT_US);
+  ce(1);
+  ets_delay_us(START_LISTENING_TIMEOUT_US);
 }
 
 
 void NRF24::stop_listening()
 {
-  nrf24_ce(0);
-  nrf24_sending(1);
+  ce(0);
   reg_write(NRF24_STATUS, RX_DR | TX_DS | MAX_RT);
   flush_rx();
   flush_tx();
@@ -657,7 +635,7 @@ nrf24_spoke_to_hub_error_t NRF24::spoke_to_hub_send(const uint8_t * buffer, size
 
   stop_listening();
   // give the TX time to switch to become RX
-  nrf24_usleep(TX_SWITCH_DELAY_US);
+  ets_delay_us(TX_SWITCH_DELAY_US);
 
   int packets_to_send = len / PAYLOAD_AVAILABLE + (
     (len % PAYLOAD_AVAILABLE > 0) ? 1 : 0);
