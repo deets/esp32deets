@@ -15,7 +15,6 @@
 #define RETRY_PAUSE 3 // times 250us
 #define CHANNEL 124 // beyond WIFI@2.4GHz
 #define SEND_TIMEOUT 50 // ms.
-#define SPI_SPEED 2 * 1000*1000
 #define RECEIVE_TIMEOUT_MS 5
 #define START_LISTENING_TIMEOUT_US 130
 #define TX_SWITCH_DELAY_US (START_LISTENING_TIMEOUT_US + 50)
@@ -299,17 +298,10 @@ void NRF24::dump_pipe_addresses()
 }
 
 
-NRF24::NRF24(gpio_num_t ce, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio_num_t miso, const char local_address[5])
+NRF24::NRF24(gpio_num_t ce, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio_num_t miso, int speed, const char local_address[5])
   : _ce(ce)
 {
-  const auto res = setup(ce, cs, sck, mosi, miso, local_address);
-  assert(res == 0);
-}
-
-
-int NRF24::setup(gpio_num_t ce, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio_num_t miso, const char local_address[5])
-{
-  int res = 0;
+  int res;
   esp_err_t spi_res;
 
   gpio_pad_select_gpio(_ce);
@@ -335,7 +327,7 @@ int NRF24::setup(gpio_num_t ce, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, 
     0, // duty_cycle_pos
     0, // cs_ena_pretrans
     0, // cs_ena_posttrans
-    SPI_SPEED, // clock_speed_hz
+    speed, // clock_speed_hz
     0, // input_delay_ns
     cs, // spics_io_num
     0, // flags
@@ -365,9 +357,8 @@ int NRF24::setup(gpio_num_t ce, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, 
     open_tx_pipe(local_address, PAYLOAD_SIZE);
     char fake_address[] = { 'F', 'O', 'O', 'B', 0 };
     open_rx_pipe(1, fake_address, PAYLOAD_SIZE);
-    return 0;
   } else {
-      return NRF24_ERROR_HARDWARE_NOT_RESPONDING;
+    assert(false); // we have an error
   }
 }
 
