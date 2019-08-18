@@ -85,6 +85,13 @@ public:
   void clear_error_info();
   nrf24_error_info_t error_info();
   nrf24_send_error_t send(const uint8_t* payload, size_t payload_length);
+
+  template<typename T>
+  nrf24_send_error_t send(const T& data)
+  {
+    return send((const uint8_t*)data.data(), data.size());
+  }
+
   size_t recv(unsigned char* buffer, size_t len);
 
   nrf24_hub_to_spoke_error_t hub_to_spoke(const char remote_address[5], uint8_t** buffer, size_t* len);
