@@ -196,8 +196,7 @@ void NRF24::set_power_speed(uint8_t power, uint8_t speed)
 
 void NRF24::set_crc(uint8_t crc_length)
 {
-  uint8_t config = reg_read(NRF24_CONFIG) & ~(CRCO | EN_CRC | MASK_RX_DR | MASK_TX_DS | MASK_MAX_RT);
-  ESP_LOGE("nrf24", "NRF24_CONFIG before CRC: %i", config);
+  uint8_t config = reg_read(NRF24_CONFIG) & ~(CRCO | EN_CRC);
   switch(crc_length)
   {
   case 0:
@@ -209,9 +208,8 @@ void NRF24::set_crc(uint8_t crc_length)
     config |= EN_CRC | CRCO;
     break;
   default:
-    assert(0);
+    assert(false);
   }
-  ESP_LOGE("nrf24", "NRF24_CONFIG: %i", config);
   reg_write(NRF24_CONFIG, config);
 }
 
