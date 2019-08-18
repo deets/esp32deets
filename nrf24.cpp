@@ -275,10 +275,8 @@ void NRF24::send_start(const uint8_t* payload, int payload_size)
   t.flags = 0;
   res = spi_device_transmit(_spi, &t);
   ESP_ERROR_CHECK(res);
-
+  reg_write(NRF24_CONFIG, (reg_read(NRF24_CONFIG) | PWR_UP));
   ce(1);
-  ets_delay_us(15);  // needs to be >10us to activate transmission
-  ce(0);
 }
 
 void NRF24::dump_pipe_addresses()
