@@ -608,8 +608,8 @@ nrf24_hub_to_spoke_error_t nrf24_hub_to_spoke(const char remote_address[5], uint
 
   nrf24_open_tx_pipe(remote_address, PAYLOAD_SIZE);
 
-  // workaround...
-  nrf24_send_start((const uint8_t*)"PING", 4);
+  // // workaround...
+  // nrf24_send_start((const uint8_t*)"PING", 4);
   // now REALLY send
   nrf24_send_error_t send_error = nrf24_send((const uint8_t*)"PING", 4);
   if(send_error != NRF24_SEND_ERROR_OK)
