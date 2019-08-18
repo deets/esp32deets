@@ -1,25 +1,14 @@
 #include "nrf24.hh"
 
-#include "driver/spi_master.h"
 
 #include <esp_timer.h>
 #include <driver/uart.h>
+#include <esp_log.h>
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <algorithm>
-
-#define WORK_BUFFER_SIZE 64
-#define HUB_WORK_BUFFER_SIZE 512
-
-typedef struct {
-  spi_device_handle_t spi;
-  uint8_t tx_work_buffer[WORK_BUFFER_SIZE];
-  uint8_t rx_work_buffer[WORK_BUFFER_SIZE];
-  uint8_t hub_work_buffer[HUB_WORK_BUFFER_SIZE];
-  nrf24_error_info_t error_info;
-} nrf24_data_t;
 
 // global configuration settings
 #define RETRIES 15
@@ -32,6 +21,9 @@ typedef struct {
 #define TX_SWITCH_DELAY_US (START_LISTENING_TIMEOUT_US + 50)
 
 // CONFIG register
+#define MASK_RX_DR  0x40
+#define MASK_TX_DS  0x20
+#define MASK_MAX_RT 0x10
 #define EN_CRC      0x08
 #define CRCO        0x04
 #define PWR_UP      0x02
@@ -69,8 +61,6 @@ namespace {
 
 const size_t PAYLOAD_SIZE=32;
 
-nrf24_data_t* nrf = 0;
-
 // hardware setup on the newjoy baseboard
 
 const gpio_num_t CS = static_cast<gpio_num_t>(5);
@@ -83,10 +73,13 @@ const gpio_num_t SENDING_DEBUG_PIN = static_cast<gpio_num_t>(13);
 class AutoStopListener
 {
 public:
+  AutoStopListener(NRF24& nrf24) : _nrf24(nrf24) {}
   ~AutoStopListener()
   {
-    nrf24_stop_listening();
+    _nrf24.stop_listening();
   }
+private:
+  NRF24& _nrf24;
 };
 
 } // end anonymous ns
@@ -135,7 +128,7 @@ static void nrf24_sending(uint8_t value)
 }
 
 
-static uint8_t nrf24_reg_write(uint8_t reg, uint8_t value)
+uint8_t NRF24::reg_write(uint8_t reg, uint8_t value)
 {
   esp_err_t res;
   struct spi_transaction_t t;
@@ -145,7 +138,7 @@ static uint8_t nrf24_reg_write(uint8_t reg, uint8_t value)
   t.tx_data[0] = 0x20 | reg; // this marks the register to be written
   t.tx_data[1] = value;
   t.flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_USE_RXDATA;
-  res = spi_device_transmit(nrf->spi, &t);
+  res = spi_device_transmit(_spi, &t);
   ESP_ERROR_CHECK(res);
   // according to spec, the STATUS register is
   // *always* shifted out with the first byte coming in
@@ -153,30 +146,30 @@ static uint8_t nrf24_reg_write(uint8_t reg, uint8_t value)
 }
 
 
-static void nrf24_reg_write_bytes(uint8_t reg, const uint8_t* buf, size_t len)
+void NRF24::reg_write_bytes(uint8_t reg, const uint8_t* buf, size_t len)
 {
   esp_err_t res;
-  assert(len + 1 < WORK_BUFFER_SIZE);
+  assert(len + 1 < NRF24_WORK_BUFFER_SIZE);
   //printf("rwb %i", reg);
-  nrf->tx_work_buffer[0] = 0x20 | reg;
+  _tx_work_buffer[0] = 0x20 | reg;
   for(size_t i=0; i < len; ++i)
   {
-    nrf->tx_work_buffer[1 + i] = buf[i];
+    _tx_work_buffer[1 + i] = buf[i];
     //printf(" %i", buf[i]);
   }
   //printf("\n");
   struct spi_transaction_t t;
   memset(&t, 0, sizeof(t));
   t.length = 8 + len * 8;
-  t.tx_buffer = nrf->tx_work_buffer;
-  t.rx_buffer = nrf->rx_work_buffer;
+  t.tx_buffer = _tx_work_buffer;
+  t.rx_buffer = _rx_work_buffer;
   t.flags = 0;
-  res = spi_device_transmit(nrf->spi, &t);
+  res = spi_device_transmit(_spi, &t);
   ESP_ERROR_CHECK(res);
 }
 
 
-uint8_t nrf24_reg_read(uint8_t reg)
+uint8_t NRF24::reg_read(uint8_t reg)
 {
   esp_err_t res;
   uint8_t ret;
@@ -186,7 +179,7 @@ uint8_t nrf24_reg_read(uint8_t reg)
   t.tx_data[0] = reg;
   t.tx_data[1] = 0;
   t.flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_USE_RXDATA;
-  res = spi_device_transmit(nrf->spi, &t);
+  res = spi_device_transmit(_spi, &t);
   ESP_ERROR_CHECK(res);
   ret = t.rx_data[1];
   //printf("rr: %#2x: %#2x\n", reg, ret);
@@ -194,41 +187,42 @@ uint8_t nrf24_reg_read(uint8_t reg)
 }
 
 
-static void nrf24_reg_read_bytes(uint8_t reg, uint8_t* buf, size_t len)
+void NRF24::reg_read_bytes(uint8_t reg, uint8_t* buf, size_t len)
 {
   esp_err_t res;
-  assert(len + 1 < WORK_BUFFER_SIZE);
-  nrf->tx_work_buffer[0] = reg;
+  assert(len + 1 < NRF24_WORK_BUFFER_SIZE);
+  _tx_work_buffer[0] = reg;
   for(size_t i=0; i < len; ++i)
   {
-    nrf->tx_work_buffer[1 + i] = 0;
-    nrf->rx_work_buffer[1 + i] = 0;
+    _tx_work_buffer[1 + i] = 0;
+    _rx_work_buffer[1 + i] = 0;
   }
   struct spi_transaction_t t;
   memset(&t, 0, sizeof(t));
   t.length = 8 + len * 8;
-  t.tx_buffer = nrf->tx_work_buffer;
-  t.rx_buffer = nrf->rx_work_buffer;
+  t.tx_buffer = _tx_work_buffer;
+  t.rx_buffer = _rx_work_buffer;
   t.flags = 0;
-  res = spi_device_transmit(nrf->spi, &t);
+  res = spi_device_transmit(_spi, &t);
   for(size_t i=0; i < len; ++i)
   {
-    buf[i] = nrf->rx_work_buffer[1 + i];
+    buf[i] = _rx_work_buffer[1 + i];
   }
   ESP_ERROR_CHECK(res);
 }
 
 
-void nrf24_set_power_speed(uint8_t power, uint8_t speed)
+void NRF24::set_power_speed(uint8_t power, uint8_t speed)
 {
-  uint8_t setup = nrf24_reg_read(NRF24_RF_SETUP) & 0b11010001;
-  nrf24_reg_write(NRF24_RF_SETUP, setup | power | speed);
+  uint8_t setup = reg_read(NRF24_RF_SETUP) & 0b11010001;
+  reg_write(NRF24_RF_SETUP, setup | power | speed);
 }
 
 
-void nrf24_set_crc(uint8_t crc_length)
+void NRF24::set_crc(uint8_t crc_length)
 {
-  uint8_t config = nrf24_reg_read(NRF24_CONFIG) & ~(CRCO | EN_CRC);
+  uint8_t config = reg_read(NRF24_CONFIG) & ~(CRCO | EN_CRC | MASK_RX_DR | MASK_TX_DS | MASK_MAX_RT);
+  ESP_LOGE("nrf24", "NRF24_CONFIG before CRC: %i", config);
   switch(crc_length)
   {
   case 0:
@@ -242,21 +236,22 @@ void nrf24_set_crc(uint8_t crc_length)
   default:
     assert(0);
   }
-  nrf24_reg_write(NRF24_CONFIG, config);
+  ESP_LOGE("nrf24", "NRF24_CONFIG: %i", config);
+  reg_write(NRF24_CONFIG, config);
 }
 
 
-void nrf24_set_channel(uint8_t channel)
+void NRF24::set_channel(uint8_t channel)
 {
   if(channel > 125)
   {
     channel = 125;
   }
-  nrf24_reg_write(NRF24_RF_CH, channel);
+  reg_write(NRF24_RF_CH, channel);
 }
 
 
-void nrf24_flush_rx()
+void NRF24::flush_rx()
 {
   esp_err_t res;
   struct spi_transaction_t t;
@@ -264,12 +259,12 @@ void nrf24_flush_rx()
   t.length = 8;
   t.tx_data[0] = FLUSH_RX;
   t.flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_USE_RXDATA;
-  res = spi_device_transmit(nrf->spi, &t);
+  res = spi_device_transmit(_spi, &t);
   ESP_ERROR_CHECK(res);
 }
 
 
-void nrf24_flush_tx()
+void NRF24::flush_tx()
 {
   esp_err_t res;
   struct spi_transaction_t t;
@@ -277,35 +272,35 @@ void nrf24_flush_tx()
   t.length = 8;
   t.tx_data[0] = FLUSH_TX;
   t.flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_USE_RXDATA;
-  res = spi_device_transmit(nrf->spi, &t);
+  res = spi_device_transmit(_spi, &t);
   ESP_ERROR_CHECK(res);
 }
 
 
-static void nrf24_send_start(const uint8_t* payload, int payload_size)
+void NRF24::send_start(const uint8_t* payload, int payload_size)
 {
   esp_err_t res;
   assert(payload_size >= 1 && payload_size <= PAYLOAD_SIZE);
 
-  nrf->tx_work_buffer[0] = W_TX_PAYLOAD;
+  _tx_work_buffer[0] = W_TX_PAYLOAD;
   for(size_t i=0; i < payload_size; ++i)
   {
-    nrf->tx_work_buffer[1 + i] = payload[i];
+    _tx_work_buffer[1 + i] = payload[i];
   }
   // clear out all bytes after given size
   for(size_t i=payload_size; i < PAYLOAD_SIZE; ++i)
   {
-    nrf->tx_work_buffer[1 + i] = 0;
+    _tx_work_buffer[1 + i] = 0;
   }
 
   struct spi_transaction_t t;
   memset(&t, 0, sizeof(t));
 
   t.length = 8 + PAYLOAD_SIZE * 8;
-  t.tx_buffer = nrf->tx_work_buffer;
-  t.rx_buffer = nrf->rx_work_buffer;
+  t.tx_buffer = _tx_work_buffer;
+  t.rx_buffer = _rx_work_buffer;
   t.flags = 0;
-  res = spi_device_transmit(nrf->spi, &t);
+  res = spi_device_transmit(_spi, &t);
   ESP_ERROR_CHECK(res);
 
   nrf24_ce(1);
@@ -313,27 +308,33 @@ static void nrf24_send_start(const uint8_t* payload, int payload_size)
   nrf24_ce(0);
 }
 
-void nrf24_dump_pipe_addresses()
+void NRF24::dump_pipe_addresses()
 {
   uint8_t buffer[5];
   memset(buffer, 0, 5);
-  nrf24_reg_read_bytes(NRF24_TX_ADDR, buffer, 5);
+  reg_read_bytes(NRF24_TX_ADDR, buffer, 5);
   printf("tx: %s\n", buffer);
   memset(buffer, 0, 5);
-  nrf24_reg_read_bytes(NRF24_RX_ADDR_P0, buffer, 5);
+  reg_read_bytes(NRF24_RX_ADDR_P0, buffer, 5);
   printf("p0: %s\n", buffer);
   memset(buffer, 0, 5);
-  nrf24_reg_read_bytes(NRF24_RX_ADDR_P0 + 1, buffer, 5);
+  reg_read_bytes(NRF24_RX_ADDR_P0 + 1, buffer, 5);
   printf("p1: %s\n", buffer);
 }
 
 
-int nrf24_setup(const char local_address[5])
+NRF24::NRF24()
+  : _setup(false)
+{
+}
+
+
+int NRF24::setup(const char local_address[5])
 {
   int res = 0;
   esp_err_t spi_res;
 
-  if(nrf)
+  if(_setup)
   {
     return NRF24_ERROR_ALREADY_SETUP;
   }
@@ -345,14 +346,6 @@ int nrf24_setup(const char local_address[5])
   gpio_pad_select_gpio(SENDING_DEBUG_PIN);
   gpio_set_level(SENDING_DEBUG_PIN, 0);
   gpio_set_direction(SENDING_DEBUG_PIN, GPIO_MODE_OUTPUT);
-
-  nrf = (nrf24_data_t*)malloc(sizeof(nrf24_data_t));
-  if(!nrf)
-  {
-    return NRF24_ERROR_MALLOC;
-
-  }
-  memset(nrf, 0, sizeof(nrf24_data_t));
 
   spi_bus_config_t buscfg = {
     MOSI, // mosi_io_num
@@ -385,104 +378,96 @@ int nrf24_setup(const char local_address[5])
   //Initialize the SPI bus
   spi_res = spi_bus_initialize(VSPI_HOST, &buscfg, 1);
   SPI_ERROR_CHECK;
-  spi_res = spi_bus_add_device(VSPI_HOST, &devcfg, &nrf->spi);
+  spi_res = spi_bus_add_device(VSPI_HOST, &devcfg, &_spi);
   SPI_ERROR_CHECK;
 
   // from here on, the __init__ of nrf24l01.py is lifted
-  nrf24_reg_write(NRF24_SETUP_AW, 0b11);
-  if(nrf24_reg_read(NRF24_SETUP_AW) == 0b11)
+  reg_write(NRF24_SETUP_AW, 0b11);
+  if(reg_read(NRF24_SETUP_AW) == 0b11)
   {
-    nrf24_reg_write(NRF24_DYNPD, 0);
-    nrf24_reg_write(NRF24_SETUP_RETR, (RETRY_PAUSE << 4) | RETRIES);
-    nrf24_set_power_speed(POWER_3, SPEED_2M);
-    nrf24_set_crc(2);
-    nrf24_reg_write(NRF24_STATUS, RX_DR | TX_DS | MAX_RT);
-    nrf24_set_channel(CHANNEL);
-    nrf24_flush_rx();
-    nrf24_flush_tx();
-    nrf24_open_tx_pipe(local_address, PAYLOAD_SIZE);
+    reg_write(NRF24_DYNPD, 0);
+    reg_write(NRF24_SETUP_RETR, (RETRY_PAUSE << 4) | RETRIES);
+    set_power_speed(POWER_3, SPEED_2M);
+    set_crc(2);
+    reg_write(NRF24_STATUS, RX_DR | TX_DS | MAX_RT);
+    set_channel(CHANNEL);
+    flush_rx();
+    flush_tx();
+    open_tx_pipe(local_address, PAYLOAD_SIZE);
     char fake_address[] = { 'F', 'O', 'O', 'B', 0 };
-    nrf24_open_rx_pipe(1, fake_address, PAYLOAD_SIZE);
+    open_rx_pipe(1, fake_address, PAYLOAD_SIZE);
     return 0;
   } else {
-      nrf24_teardown();
+      teardown();
       return NRF24_ERROR_HARDWARE_NOT_RESPONDING;
   }
 }
 
 
-void nrf24_teardown()
+void NRF24::teardown()
 {
-  if(nrf)
-  {
-    spi_bus_remove_device(nrf->spi);
-    spi_bus_free(VSPI_HOST);
-    free(nrf);
-    nrf = 0;
-  }
+  spi_bus_remove_device(_spi);
+  spi_bus_free(VSPI_HOST);
+  _setup = false;
 }
 
 
-void nrf24_start_listening()
+void NRF24::start_listening()
 {
-  assert(nrf);
-  nrf24_reg_write(NRF24_CONFIG, nrf24_reg_read(NRF24_CONFIG) | PWR_UP | PRIM_RX);
-  nrf24_reg_write(NRF24_STATUS, RX_DR | TX_DS | MAX_RT);
+  reg_write(NRF24_CONFIG, reg_read(NRF24_CONFIG) | PWR_UP | PRIM_RX);
+  reg_write(NRF24_STATUS, RX_DR | TX_DS | MAX_RT);
   // TODO: is this necessary?
   /* if self.pipe0_read_addr is not None: */
   /*     self.reg_write_bytes(RX_ADDR_P0, self.pipe0_read_addr) */
 
-  nrf24_flush_rx();
-  nrf24_flush_tx();
+  flush_rx();
+  flush_tx();
   nrf24_ce(1);
   nrf24_sending(0);
   nrf24_usleep(START_LISTENING_TIMEOUT_US);
 }
 
 
-void nrf24_stop_listening()
+void NRF24::stop_listening()
 {
-  assert(nrf);
   nrf24_ce(0);
   nrf24_sending(1);
-  nrf24_reg_write(NRF24_STATUS, RX_DR | TX_DS | MAX_RT);
-  nrf24_flush_rx();
-  nrf24_flush_tx();
-  nrf24_reg_write(NRF24_CONFIG, (nrf24_reg_read(NRF24_CONFIG) | PWR_UP) & ~PRIM_RX);
+  reg_write(NRF24_STATUS, RX_DR | TX_DS | MAX_RT);
+  flush_rx();
+  flush_tx();
+  reg_write(NRF24_CONFIG, (reg_read(NRF24_CONFIG) | PWR_UP) & ~PRIM_RX);
 }
 
 
-int nrf24_any()
+int NRF24::any()
 {
-  assert(nrf);
-  int res = !(nrf24_reg_read(NRF24_FIFO_STATUS) & RX_EMPTY);
+  int res = !(reg_read(NRF24_FIFO_STATUS) & RX_EMPTY);
   //nrf24_dump_pipe_addresses();
   return res;
 }
 
 
-static nrf24_send_error_t nrf24_send_done()
+nrf24_send_error_t NRF24::send_done()
 {
-  assert(nrf);
-  if(!(nrf24_reg_read(NRF24_STATUS) & (TX_DS | MAX_RT)))
+  if(!(reg_read(NRF24_STATUS) & (TX_DS | MAX_RT)))
   {
     return NRF24_SEND_ERROR_NONE;
   }
   // either finished or failed: get and clear status flags, power down
-  uint8_t status = nrf24_reg_write(NRF24_STATUS, RX_DR | TX_DS | MAX_RT);
-  nrf24_reg_write(NRF24_CONFIG, nrf24_reg_read(NRF24_CONFIG) & ~PWR_UP);
+  uint8_t status = reg_write(NRF24_STATUS, RX_DR | TX_DS | MAX_RT);
+  reg_write(NRF24_CONFIG, reg_read(NRF24_CONFIG) & ~PWR_UP);
   if(status & TX_DS)
   {
     return NRF24_SEND_ERROR_OK;
   }
   if(status & MAX_RT)
   {
-    uint8_t observe = nrf24_reg_read(NRF24_OBSERVE_TX);
-    if(observe != nrf->error_info.last_observe_tx)
+    uint8_t observe = reg_read(NRF24_OBSERVE_TX);
+    if(observe != _error_info.last_observe_tx)
     {
       // we actually have a real MAX_RT reached case
       // and return that
-      nrf->error_info.last_observe_tx = observe;
+      _error_info.last_observe_tx = observe;
       return NRF24_SEND_ERROR_MAX_RT;
     }
   }
@@ -500,76 +485,74 @@ int64_t ticks_diff(int64_t end, int64_t start)
 }
 
 
-nrf24_send_error_t nrf24_send(const uint8_t* payload, size_t payload_size)
+nrf24_send_error_t NRF24::send(const uint8_t* payload, size_t payload_size)
 {
-  assert(nrf);
-  nrf24_send_start(payload, payload_size);
+  send_start(payload, payload_size);
 
   int64_t start = esp_timer_get_time();
   nrf24_send_error_t result = NRF24_SEND_ERROR_NONE;
   while(result == NRF24_SEND_ERROR_NONE && ticks_diff(esp_timer_get_time(), start) < SEND_TIMEOUT * 1000)
   {
-    result = nrf24_send_done();
+    result = send_done();
   }
   switch(result)
   {
   case NRF24_SEND_ERROR_NONE:
-    ++nrf->error_info.timeout;
+    ++_error_info.timeout;
     break;
   case NRF24_SEND_ERROR_OK:
-    ++nrf->error_info.ok;
+    ++_error_info.ok;
     break;
   case NRF24_SEND_ERROR_MAX_RT:
-    ++nrf->error_info.max_rt;
+    ++_error_info.max_rt;
     break;
   case NRF24_SEND_ERROR_SPURIOUS:
-    ++nrf->error_info.spurious;
+    ++_error_info.spurious;
     break;
   }
   return result;
 }
 
 
-size_t nrf24_recv(unsigned char* buffer, size_t len)
+size_t NRF24::recv(unsigned char* buffer, size_t len)
 {
-  assert(nrf);
   esp_err_t res;
-  nrf->tx_work_buffer[0] = R_RX_PAYLOAD;
-  memset(nrf->tx_work_buffer + 1, 0, PAYLOAD_SIZE);
-  memset(nrf->rx_work_buffer + 1, 0, PAYLOAD_SIZE);
+  _tx_work_buffer[0] = R_RX_PAYLOAD;
+  memset(_tx_work_buffer + 1, 0, PAYLOAD_SIZE);
+  memset(_rx_work_buffer + 1, 0, PAYLOAD_SIZE);
 
   struct spi_transaction_t t;
   memset(&t, 0, sizeof(t));
 
   t.length = 8 + PAYLOAD_SIZE * 8;
-  t.tx_buffer = nrf->tx_work_buffer;
-  t.rx_buffer = nrf->rx_work_buffer;
+  t.tx_buffer = _tx_work_buffer;
+  t.rx_buffer = _rx_work_buffer;
   t.flags = 0;
-  res = spi_device_transmit(nrf->spi, &t);
+  res = spi_device_transmit(_spi, &t);
   ESP_ERROR_CHECK(res);
-  nrf24_reg_write(NRF24_STATUS, RX_DR);
+  reg_write(NRF24_STATUS, RX_DR);
   size_t to_copy = PAYLOAD_SIZE;
   if(buffer)
   {
     to_copy = std::min(len, PAYLOAD_SIZE);
-    memcpy(buffer, nrf->rx_work_buffer + 1, to_copy);
+    memcpy(buffer, _rx_work_buffer + 1, to_copy);
   }
   return to_copy;
 }
 
 
-void nrf24_open_tx_pipe(const char address[5], int payload_size)
+void NRF24::open_tx_pipe(const char address[5], int payload_size)
 {
   // This needs to be set to the same address according to
   // the datasheed for auto-ack
-  nrf24_reg_write_bytes(NRF24_RX_ADDR_P0, (const uint8_t*)address, 5);
-  nrf24_reg_write_bytes(NRF24_TX_ADDR, (const uint8_t*)address, 5);
-  nrf24_reg_write(NRF24_RX_PW_P0, payload_size);
-  nrf24_reg_write(NRF24_EN_RXADDR, nrf24_reg_read(NRF24_EN_RXADDR) | (1 << 0));
+  reg_write_bytes(NRF24_RX_ADDR_P0, (const uint8_t*)address, 5);
+  reg_write_bytes(NRF24_TX_ADDR, (const uint8_t*)address, 5);
+  reg_write(NRF24_RX_PW_P0, payload_size);
+  reg_write(NRF24_EN_RXADDR, reg_read(NRF24_EN_RXADDR) | (1 << 0));
 }
 
 
-void nrf24_open_rx_pipe(int pipe_id, const char address[5], int payload_size)
+void NRF24::open_rx_pipe(int pipe_id, const char address[5], int payload_size)
 {
   // I only allow the rx-pipe to be 1-5 because
   // the pipe 0 is always equal to the tx pipe's address
@@ -578,15 +561,15 @@ void nrf24_open_rx_pipe(int pipe_id, const char address[5], int payload_size)
   // is not supposed to be generic.
   // So in sum, pipe_id can only be 1 ;)
   assert(1 <= pipe_id && pipe_id < 2);
-  nrf24_reg_write_bytes(NRF24_RX_ADDR_P0 + pipe_id, (const uint8_t*)address, 5);
-  nrf24_reg_write(NRF24_RX_PW_P0 + pipe_id, payload_size);
-  nrf24_reg_write(NRF24_EN_RXADDR, nrf24_reg_read(NRF24_EN_RXADDR) | (1 << pipe_id));
+  reg_write_bytes(NRF24_RX_ADDR_P0 + pipe_id, (const uint8_t*)address, 5);
+  reg_write(NRF24_RX_PW_P0 + pipe_id, payload_size);
+  reg_write(NRF24_EN_RXADDR, reg_read(NRF24_EN_RXADDR) | (1 << pipe_id));
 }
 
-static int nrf24_wait_for_incoming_or_timeout()
+int NRF24::wait_for_incoming_or_timeout()
 {
   int64_t start_time = esp_timer_get_time();
-  while(!nrf24_any())
+  while(!any())
   {
     if(ticks_diff(esp_timer_get_time(), start_time) > RECEIVE_TIMEOUT_MS * 1000)
     {
@@ -598,83 +581,81 @@ static int nrf24_wait_for_incoming_or_timeout()
 
 // Implements the ping and subsequent message retrieval for
 // a given spoke
-nrf24_hub_to_spoke_error_t nrf24_hub_to_spoke(const char remote_address[5], uint8_t** buffer, size_t* len)
+nrf24_hub_to_spoke_error_t NRF24::hub_to_spoke(const char remote_address[5], uint8_t** buffer, size_t* len)
 {
-  AutoStopListener asl;
+  AutoStopListener asl(*this);
 
   *buffer = 0;
   *len = 0;
   nrf24_hub_to_spoke_error_t result = NRF24_HUB_ERROR_OK;
 
-  nrf24_open_tx_pipe(remote_address, PAYLOAD_SIZE);
+  open_tx_pipe(remote_address, PAYLOAD_SIZE);
 
   // // workaround...
   // nrf24_send_start((const uint8_t*)"PING", 4);
   // now REALLY send
-  nrf24_send_error_t send_error = nrf24_send((const uint8_t*)"PING", 4);
+  nrf24_send_error_t send_error = send((const uint8_t*)"PING", 4);
   if(send_error != NRF24_SEND_ERROR_OK)
   {
     return NRF24_HUB_SEND_FAILED;
   }
 
-  nrf24_start_listening();
+  start_listening();
 
   size_t received_bytes = 0;
-  uint8_t* buffer_pointer = nrf->hub_work_buffer;
+  uint8_t* buffer_pointer = _hub_work_buffer;
   uint8_t packets_left = 1;
   while(packets_left)
   {
-    if(nrf24_wait_for_incoming_or_timeout())
+    if(wait_for_incoming_or_timeout())
     {
       return NRF24_HUB_RX_TIMEOUT;
     }
-    nrf24_recv(0, 0);
+    recv(0, 0);
     // the rx_buffer has a leading padding byte,
     // so we have to skip two, not just one, for
     // the packet length
-    uint8_t packet_length = nrf->rx_work_buffer[2];
+    uint8_t packet_length = _rx_work_buffer[2];
     // same reason here - skip one byte more
-    packets_left = nrf->rx_work_buffer[1];
+    packets_left = _rx_work_buffer[1];
     received_bytes += packet_length;
-    if(received_bytes > HUB_WORK_BUFFER_SIZE)
+    if(received_bytes > NRF24_HUB_WORK_BUFFER_SIZE)
     {
       return NRF24_HUB_PAYLOAD_TOO_LONG;
     }
-    memcpy(buffer_pointer, nrf->rx_work_buffer + 3, packet_length);
+    memcpy(buffer_pointer, _rx_work_buffer + 3, packet_length);
     buffer_pointer += packet_length;
   }
 
   *len = received_bytes;
-  *buffer = nrf->hub_work_buffer;
+  *buffer = _hub_work_buffer;
 
   return result;
 }
 
 
-void nrf24_clear_error_info()
+void NRF24::clear_error_info()
 {
-  assert(nrf);
-  memset(&nrf->error_info, 0, sizeof(nrf24_error_info_t));
+  memset(&_error_info, 0, sizeof(nrf24_error_info_t));
   // this is needed according to section 7.4.2
   // to reset OBSERVE_TX
-  nrf24_set_channel(CHANNEL);
+  set_channel(CHANNEL);
 }
 
 
-nrf24_error_info_t nrf24_error_info()
+nrf24_error_info_t NRF24::error_info()
 {
-  assert(nrf);
-  return nrf->error_info;
+  return _error_info;
 }
 
 #define PROTOCOL_HEADER_LENGTH 2
 #define PAYLOAD_AVAILABLE (PAYLOAD_SIZE - PROTOCOL_HEADER_LENGTH)
 
-nrf24_spoke_to_hub_error_t nrf24_spoke_to_hub_send(const uint8_t * buffer, size_t len)
+nrf24_spoke_to_hub_error_t NRF24::spoke_to_hub_send(const uint8_t * buffer, size_t len)
 {
   nrf24_spoke_to_hub_error_t res = NRF24_SPOKE_ERROR_OK;
 
-  nrf24_stop_listening();
+  stop_listening();
   // give the TX time to switch to become RX
   nrf24_usleep(TX_SWITCH_DELAY_US);
 
@@ -697,7 +678,7 @@ nrf24_spoke_to_hub_error_t nrf24_spoke_to_hub_send(const uint8_t * buffer, size_
     memcpy(dest, buffer, to_copy);
     buffer += to_copy;
     len -= to_copy;
-    nrf24_send_error_t send_error = nrf24_send(packet_buffer, to_copy + PROTOCOL_HEADER_LENGTH);
+    nrf24_send_error_t send_error = send(packet_buffer, to_copy + PROTOCOL_HEADER_LENGTH);
 
     switch(send_error)
     {
@@ -713,6 +694,6 @@ nrf24_spoke_to_hub_error_t nrf24_spoke_to_hub_send(const uint8_t * buffer, size_
   }
 
 exit:
-  nrf24_start_listening();
+  start_listening();
   return res;
 }
