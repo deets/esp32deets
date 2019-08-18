@@ -358,6 +358,7 @@ NRF24::NRF24(gpio_num_t ce, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio
   } else {
     assert(false); // we have an error
   }
+  start_listening();
 }
 
 
