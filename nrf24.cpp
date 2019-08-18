@@ -287,8 +287,6 @@ static void nrf24_send_start(const uint8_t* payload, int payload_size)
   esp_err_t res;
   assert(payload_size >= 1 && payload_size <= PAYLOAD_SIZE);
 
-  nrf24_reg_write(NRF24_CONFIG, (nrf24_reg_read(NRF24_CONFIG) | PWR_UP) & ~PRIM_RX);
-
   nrf->tx_work_buffer[0] = W_TX_PAYLOAD;
   for(size_t i=0; i < payload_size; ++i)
   {
@@ -450,6 +448,7 @@ void nrf24_stop_listening()
   nrf24_reg_write(NRF24_STATUS, RX_DR | TX_DS | MAX_RT);
   nrf24_flush_rx();
   nrf24_flush_tx();
+  nrf24_reg_write(NRF24_CONFIG, (nrf24_reg_read(NRF24_CONFIG) | PWR_UP) & ~PRIM_RX);
 }
 
 
