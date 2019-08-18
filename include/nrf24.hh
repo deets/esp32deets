@@ -72,13 +72,13 @@ struct nrf24_error_info_t
 class NRF24
 {
 public:
-  NRF24();
+  NRF24(gpio_num_t ce, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio_num_t miso, const char local_address[5]);
+  ~NRF24();
 
-  int setup(const char local_address[5]);
   uint8_t reg_read(uint8_t register);
   void open_rx_pipe(int number, const char local_address[5], int payload_size);
   void open_tx_pipe(const char remote_address[5], int payload_size);
-  void teardown();
+
   void start_listening();
   void stop_listening();
   int any();
@@ -92,6 +92,8 @@ public:
   nrf24_spoke_to_hub_error_t spoke_to_hub_send(const uint8_t * buffer, size_t len);
 
 private:
+  int setup(gpio_num_t ce, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio_num_t miso, const char local_address[5]);
+
   uint8_t reg_write(uint8_t reg, uint8_t value);
   void reg_write_bytes(uint8_t reg, const uint8_t* buf, size_t len);
   void reg_read_bytes(uint8_t reg, uint8_t* buf, size_t len);
@@ -112,6 +114,6 @@ private:
   uint8_t _hub_work_buffer[NRF24_HUB_WORK_BUFFER_SIZE];
   nrf24_error_info_t _error_info;
 
-  bool _setup;
+  gpio_num_t _ce;
 
 };

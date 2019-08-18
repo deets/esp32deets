@@ -58,14 +58,6 @@ namespace {
 
 const size_t PAYLOAD_SIZE=32;
 
-// hardware setup on the newjoy baseboard
-
-const gpio_num_t CS = static_cast<gpio_num_t>(5);
-const gpio_num_t CE = static_cast<gpio_num_t>(19);
-const gpio_num_t MISO = static_cast<gpio_num_t>(22);
-const gpio_num_t MOSI = static_cast<gpio_num_t>(23);
-const gpio_num_t SCK = static_cast<gpio_num_t>(18);
-
 class AutoStopListener
 {
 public:
@@ -108,7 +100,7 @@ private:
 
 void NRF24::ce(uint8_t value)
 {
-  gpio_set_level(CE, value);
+  gpio_set_level(_ce, value);
 }
 
 
@@ -307,30 +299,27 @@ void NRF24::dump_pipe_addresses()
 }
 
 
-NRF24::NRF24()
-  : _setup(false)
+NRF24::NRF24(gpio_num_t ce, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio_num_t miso, const char local_address[5])
+  : _ce(ce)
 {
+  const auto res = setup(ce, cs, sck, mosi, miso, local_address);
+  assert(res == 0);
 }
 
 
-int NRF24::setup(const char local_address[5])
+int NRF24::setup(gpio_num_t ce, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio_num_t miso, const char local_address[5])
 {
   int res = 0;
   esp_err_t spi_res;
 
-  if(_setup)
-  {
-    return NRF24_ERROR_ALREADY_SETUP;
-  }
-
-  gpio_pad_select_gpio(CE);
-  gpio_set_level(CE, 0);
-  gpio_set_direction(CE, GPIO_MODE_OUTPUT);
+  gpio_pad_select_gpio(_ce);
+  gpio_set_level(_ce, 0);
+  gpio_set_direction(_ce, GPIO_MODE_OUTPUT);
 
   spi_bus_config_t buscfg = {
-    MOSI, // mosi_io_num
-    MISO, // miso_io_num
-    SCK, // sclk_io_num
+    mosi, // mosi_io_num
+    miso, // miso_io_num
+    sck, // sclk_io_num
     -1, // quadwp_io_num
     -1, // quadhd_io_num
     0, // max_transfer_sz
@@ -348,7 +337,7 @@ int NRF24::setup(const char local_address[5])
     0, // cs_ena_posttrans
     SPI_SPEED, // clock_speed_hz
     0, // input_delay_ns
-    CS, // spics_io_num
+    cs, // spics_io_num
     0, // flags
     1, // queue_size
     nullptr, // transaction_cb_t pre_cb
@@ -378,17 +367,15 @@ int NRF24::setup(const char local_address[5])
     open_rx_pipe(1, fake_address, PAYLOAD_SIZE);
     return 0;
   } else {
-      teardown();
       return NRF24_ERROR_HARDWARE_NOT_RESPONDING;
   }
 }
 
 
-void NRF24::teardown()
+NRF24::~NRF24()
 {
   spi_bus_remove_device(_spi);
   spi_bus_free(VSPI_HOST);
-  _setup = false;
 }
 
 
