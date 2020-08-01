@@ -2,7 +2,8 @@
 #include "mpu6050.hh"
 #include <esp_log.h>
 
-#include <array>
+#include <cstring>
+#include <algorithm>
 
 #define MPU6050_RA_WHO_AM_I 0x75
 
@@ -18,6 +19,44 @@
 #define MPU6050_RA_GYRO_XOUT_H 0x43
 #define MPU6050_RA_ACCEL_XOUT_H 0x3B
 
+namespace {
+
+template<typename>
+struct array_size;
+template<typename T, size_t N>
+struct array_size<std::array<T,N> > {
+    static size_t const size = N;
+};
+
+const auto GYRO_CALIBRATION_VARIANCE = 5;
+
+template<typename T>
+int16_t compute_variance(const T& buffer)
+{
+  // I don't really remember why this works
+  // as variance computation, but I probably derived
+  // it somehow during the new joy project.
+  const auto size = buffer.size();
+  int32_t accu = 0;
+  for(size_t i=0; i < size - 1; ++i)
+  {
+    accu += abs(buffer[i] - buffer[(i + 1)]);
+  }
+  accu /= size - 1;
+  return (int16_t)accu;
+}
+
+
+template<typename T>
+int16_t compute_average(const T& buffer)
+{
+  int32_t accu = 0;
+  accu = std::accumulate(buffer.cbegin(), buffer.cend(), accu);
+  accu /=  buffer.size();
+  return (int16_t)accu;
+}
+
+} // end ns anonymous
 
 
 MPU6050::MPU6050(uint8_t address, I2CHost& i2c, gyro_fs_t gyro_scale, acc_fs_t acc_scale)
@@ -56,6 +95,45 @@ MPU6050::MPU6050(uint8_t address, I2CHost& i2c, gyro_fs_t gyro_scale, acc_fs_t a
 
   set_gyro_scale(gyro_scale);
   set_acc_scale(acc_scale);
+}
+
+
+bool MPU6050::calibrate(size_t iterations)
+{
+  using buffer_t = std::array<int16_t, 100>;
+  std::array<buffer_t, 7> all_sensor_data;
+  for(size_t i=0; i < iterations; ++i)
+  {
+    vTaskDelay(pdMS_TO_TICKS(1));
+    auto raw = raw_sensor_data();
+    auto p = reinterpret_cast<uint16_t*>(raw.data());
+    for(auto k=0; k < 7; ++k)
+    {
+      all_sensor_data[k][i] = *p++;
+    }
+
+    // we got one full buffer,
+    // try and see if we have been resting
+    if(i % array_size<buffer_t>::size == array_size<buffer_t>::size - 1)
+    {
+      // when all three
+      if(
+        compute_variance(all_sensor_data[4])< GYRO_CALIBRATION_VARIANCE && \
+        compute_variance(all_sensor_data[5])< GYRO_CALIBRATION_VARIANCE && \
+        compute_variance(all_sensor_data[6])< GYRO_CALIBRATION_VARIANCE)
+        {
+          // I piggy-back on the gyros being stable, as I presume there is also no acceleration going on then
+
+          for(size_t i=0; i < 3; ++i)
+          {
+            _gyro_calibration[i] = compute_average(all_sensor_data[4 + i]);
+            _acc_calibration[i] = compute_average(all_sensor_data[i]);
+          }
+        }
+      return true;
+    }
+  }
+  return false;
 }
 
 
@@ -122,12 +200,9 @@ void MPU6050::set_acc_scale(acc_fs_t acc_scale)
   }
 }
 
-MPU6050::gyro_data_t MPU6050::read_raw() const
+std::array<uint8_t, 14> MPU6050::raw_sensor_data() const
 {
-  gyro_data_t res;
   std::array<uint8_t, 14> raw; // acc + temp + gyro data
-  raw.fill(0);
-
   _i2c.read_from_device_register_into_buffer(
     _address,
     MPU6050_RA_ACCEL_XOUT_H,
@@ -140,12 +215,18 @@ MPU6050::gyro_data_t MPU6050::read_raw() const
     raw[i*2]= raw[i*2 + 1];
     raw[i*2 + 1] = h;
   }
+  return raw;
+}
 
-  int16_t* word_access = (int16_t*)raw.data();
+MPU6050::gyro_data_t MPU6050::read_raw() const
+{
+  gyro_data_t res;
+  const auto raw = raw_sensor_data();
+  const auto word_access = (const int16_t*)raw.data();
   for(size_t i=0; i < 3; ++i)
   {
-    res.gyro[i] = (float)(word_access[3 + 1 + i]) / _gyro_correction;
-    res.acc[i] = (float)(word_access[i]) / _acc_correction;
+    res.gyro[i] = (float)(word_access[3 + 1 + i] - _gyro_calibration[i]) / _gyro_correction;
+    res.acc[i] = (float)(word_access[i] - _acc_calibration[i]) / _acc_correction;
   }
   return res;
 }
@@ -158,7 +239,6 @@ MPU6050::gyro_data_t MPU6050::read_raw() const
 #include <string.h>
 
 #define GYRO_CALIBRATION_BUFFER_SIZE 10
-#define GYRO_CALIBRATION_VARIANCE 5
 
 
 
@@ -170,29 +250,6 @@ typedef struct {
   float gyro_correction;
 } mpu6050_task_data_t;
 
-
-STATIC int16_t compute_variance(int16_t* buffer)
-{
-  int32_t accu = 0;
-  for(size_t i=0; i < GYRO_CALIBRATION_BUFFER_SIZE - 1; ++i)
-  {
-    accu += abs(buffer[i * 3] - buffer[(i + 1) * 3]);
-  }
-  accu /= GYRO_CALIBRATION_BUFFER_SIZE - 1;
-  return (int16_t)accu;
-}
-
-
-STATIC int16_t compute_average(int16_t* buffer)
-{
-  int32_t accu = 0;
-  for(size_t i=0; i < GYRO_CALIBRATION_BUFFER_SIZE; ++i)
-  {
-    accu += buffer[i * 3];
-  }
-  accu /= GYRO_CALIBRATION_BUFFER_SIZE;
-  return (int16_t)accu;
-}
 
 
 void newjoy_task_mpu6050(nj_task_def_t* task, uint8_t *buffer)
@@ -220,31 +277,6 @@ _i2c,
   switch(task_data->gyro_calbration_mode)
   {
   case GYRO_UNCALIBRATED:
-    // when uncalibrated, no readings occur!
-    gyro_data[0] = gyro_data[1] = gyro_data[2] = 0.0f;
-    acc_data[0] = acc_data[1] = acc_data[2] = 0.0f;
-    for(size_t i=0; i < 3; ++i)
-    {
-      task_data->gyro_calibration_buffer[task_data->gyro_calibration_buffer_fill * 3 + i] = word_access[3 + 1 + i];
-      task_data->acc_calibration_buffer[task_data->gyro_calibration_buffer_fill * 3 + i] = word_access[i];
-    }
-    task_data->gyro_calibration_buffer_fill = (task_data->gyro_calibration_buffer_fill + 1) % GYRO_CALIBRATION_BUFFER_SIZE;
-    // if we reach zero, we have sampled one full ring-buffer of data, so try & compute the variance, and assume calibration
-    // if all of them are below a threshold
-    if(compute_variance(&task_data->gyro_calibration_buffer[0]) < GYRO_CALIBRATION_VARIANCE && \
-       compute_variance(&task_data->gyro_calibration_buffer[1]) < GYRO_CALIBRATION_VARIANCE && \
-       compute_variance(&task_data->gyro_calibration_buffer[2]) < GYRO_CALIBRATION_VARIANCE)
-    {
-      task_data->gyro_calbration_mode = GYRO_CALIBRATED;
-      // I piggy-back on the gyros being stable, as I presume there is also no acceleration going on then
-      for(size_t i=0; i < 3; ++i)
-      {
-        task_data->gyro_calibration[i] = compute_average(&task_data->gyro_calibration_buffer[i]);
-        task_data->acc_calibration[i] = compute_average(&task_data->acc_calibration_buffer[i]);
-      }
-      task_data->acc_calibration[2] -= (int16_t)(task_data->acc_correction) ; // assume level orientation!
-    }
-    break;
   case GYRO_CALIBRATED:
     for(size_t i=0; i < 3; ++i)
     {

@@ -3,6 +3,7 @@
 
 #include "i2c.hh"
 
+#include <array>
 #include <cstdint>
 
 #define MPU6050_ADDRESS_AD0_LOW 0x68
@@ -35,12 +36,19 @@ public:
 
   void set_gyro_scale(gyro_fs_t);
   void set_acc_scale(acc_fs_t);
+  bool calibrate(size_t iterations);
 
   gyro_data_t read_raw() const;
 
 private:
+  // byte-swapped but otherwise not touched
+  std::array<uint8_t, 14> raw_sensor_data() const;
+
   uint8_t _address;
   I2CHost _i2c;
+  // The correction factors to convert
+  // from raw readings to d/s or m/s**2
   float _gyro_correction;
   float _acc_correction;
+  std::array<int16_t, 3> _gyro_calibration, _acc_calibration;
 };
