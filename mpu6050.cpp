@@ -5,28 +5,6 @@
 #include <cstring>
 #include <algorithm>
 
-#define MPU6050_RA_WHO_AM_I 0x75
-
-#define MPU6050_RA_PWR_MGMT_1  0x6B
-#define MPU6050_RA_PWR_MGMT_2  0x6C
-#define MPU6050_CLOCK_PLL_XGYRO 0x01
-#define MPU6050_RA_CONFIG 0x1A
-#define MPU6050_RA_SMPLRT_DIV 0x19
-#define MPU6050_RA_GYRO_CONFIG 0x1B
-#define MPU6050_RA_ACCEL_CONFIG 0x1C
-#define MPU6050_FIFO_EN 0x23
-#define MPU6050_RA_USER_CTRL 0x6A
-#define MPU6050_FIFO_COUNT_H 0x72
-#define MPU6050_FIFO_COUNT_L 0x73
-#define MPU6050_FIFO_RW 0x74
-
-#define MPU6050_DEFAULT_SAMPLE_RATE 0x00
-#define MPU6050_RA_GYRO_XOUT_H 0x43
-#define MPU6050_RA_ACCEL_XOUT_H 0x3B
-
-#define FIFO_RESET 0x04
-#define FIFO_EN 0x40
-
 namespace {
 
 template<typename>
@@ -258,6 +236,16 @@ void MPU6050::setup_fifo(fifo_e fifo_setup)
     user_ctrl |= FIFO_EN | FIFO_RESET;
   }
   _i2c.write_byte_to_register(_address, MPU6050_RA_USER_CTRL, user_ctrl);
+  _fifo_datagram_size = 0;
+  _fifo_datagram_size += 2 * (fifo_setup & FIFO_EN_TEMP ? 1 : 0);
+  _fifo_datagram_size += 2 * (fifo_setup & FIFO_EN_XG ? 1 : 0);
+  _fifo_datagram_size += 2 * (fifo_setup & FIFO_EN_YG ? 1 : 0);
+  _fifo_datagram_size += 2 * (fifo_setup & FIFO_EN_ZG ? 1 : 0);
+  _fifo_datagram_size += 6 * (fifo_setup & FIFO_EN_ACCEL ? 1 : 0);
+  assert(!(FIFO_EN_SLV0 & fifo_setup));
+  assert(!(FIFO_EN_SLV1 & fifo_setup));
+  assert(!(FIFO_EN_SLV2 & fifo_setup));
+  _fifo_setup = fifo_setup;
   empty_fifo();
 }
 
@@ -285,7 +273,7 @@ void MPU6050::reset_fifo()
   _i2c.write_byte_to_register(_address, MPU6050_RA_USER_CTRL, user_ctrl | FIFO_RESET);
 }
 
-bool MPU6050::is_fifo_enabled()
+bool MPU6050::is_fifo_enabled() const
 {
   return read_user_ctrl() | FIFO_EN;
 }
@@ -293,10 +281,14 @@ bool MPU6050::is_fifo_enabled()
 void MPU6050::empty_fifo()
 {
   std::array<uint8_t, 1024> buffer;
-  _i2c.read_from_device_register_into_buffer(
-    _address, MPU6050_FIFO_RW,
-    buffer.data(),
-    fifo_count()
-    );
-  reset_fifo();
+  const auto count = fifo_count();
+  if(count)
+  {
+    _i2c.read_from_device_register_into_buffer(
+      _address, MPU6050_FIFO_RW,
+      buffer.data(),
+      count
+      );
+    reset_fifo();
+  }
 }
