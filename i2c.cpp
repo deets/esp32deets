@@ -84,6 +84,7 @@ void I2CHost::write_byte_to_register(uint8_t address, uint8_t register_, uint8_t
   i2c_master_stop(cmd);
   err = i2c_master_cmd_begin(_i2c_num, cmd, 1000 / portTICK_RATE_MS);
   assert(err == ESP_OK);
+  i2c_cmd_link_delete(cmd);
 }
 
 void I2CHost::read_from_device_register_into_buffer(uint8_t address, uint8_t register_, uint8_t* buffer, size_t length) const
