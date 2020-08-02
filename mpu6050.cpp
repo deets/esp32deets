@@ -28,7 +28,16 @@ struct array_size<std::array<T,N> > {
     static size_t const size = N;
 };
 
-const auto GYRO_CALIBRATION_VARIANCE = 5;
+const auto GYRO_CALIBRATION_VARIANCE = 20;
+
+template<typename T>
+int16_t compute_average(const T& buffer)
+{
+  int32_t accu = 0;
+  accu = std::accumulate(buffer.cbegin(), buffer.cend(), accu);
+  accu /=  buffer.size();
+  return (int16_t)accu;
+}
 
 template<typename T>
 int16_t compute_variance(const T& buffer)
@@ -43,16 +52,6 @@ int16_t compute_variance(const T& buffer)
     accu += abs(buffer[i] - buffer[(i + 1)]);
   }
   accu /= size - 1;
-  return (int16_t)accu;
-}
-
-
-template<typename T>
-int16_t compute_average(const T& buffer)
-{
-  int32_t accu = 0;
-  accu = std::accumulate(buffer.cbegin(), buffer.cend(), accu);
-  accu /=  buffer.size();
   return (int16_t)accu;
 }
 
@@ -109,28 +108,27 @@ bool MPU6050::calibrate(size_t iterations)
     auto p = reinterpret_cast<uint16_t*>(raw.data());
     for(auto k=0; k < 7; ++k)
     {
-      all_sensor_data[k][i] = *p++;
+      all_sensor_data[k][i % array_size<buffer_t>::size] = *p++;
     }
 
     // we got one full buffer,
     // try and see if we have been resting
     if(i % array_size<buffer_t>::size == array_size<buffer_t>::size - 1)
     {
-      // when all three
+      // when all three are below our threshold, we consider this to be good.
       if(
         compute_variance(all_sensor_data[4])< GYRO_CALIBRATION_VARIANCE && \
         compute_variance(all_sensor_data[5])< GYRO_CALIBRATION_VARIANCE && \
         compute_variance(all_sensor_data[6])< GYRO_CALIBRATION_VARIANCE)
         {
           // I piggy-back on the gyros being stable, as I presume there is also no acceleration going on then
-
           for(size_t i=0; i < 3; ++i)
           {
             _gyro_calibration[i] = compute_average(all_sensor_data[4 + i]);
             _acc_calibration[i] = compute_average(all_sensor_data[i]);
           }
+          return true;
         }
-      return true;
     }
   }
   return false;
