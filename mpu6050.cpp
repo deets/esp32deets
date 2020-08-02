@@ -14,10 +14,18 @@
 #define MPU6050_RA_SMPLRT_DIV 0x19
 #define MPU6050_RA_GYRO_CONFIG 0x1B
 #define MPU6050_RA_ACCEL_CONFIG 0x1C
+#define MPU6050_FIFO_EN 0x23
+#define MPU6050_RA_USER_CTRL 0x6A
+#define MPU6050_FIFO_COUNT_H 0x72
+#define MPU6050_FIFO_COUNT_L 0x73
+#define MPU6050_FIFO_RW 0x74
 
-#define MPU6050_DEFAULT_SAMPLE_RATE 0x20
+#define MPU6050_DEFAULT_SAMPLE_RATE 0x00
 #define MPU6050_RA_GYRO_XOUT_H 0x43
 #define MPU6050_RA_ACCEL_XOUT_H 0x3B
+
+#define FIFO_RESET 0x04
+#define FIFO_EN 0x40
 
 namespace {
 
@@ -58,7 +66,7 @@ int16_t compute_variance(const T& buffer)
 } // end ns anonymous
 
 
-MPU6050::MPU6050(uint8_t address, I2CHost& i2c, gyro_fs_t gyro_scale, acc_fs_t acc_scale)
+MPU6050::MPU6050(uint8_t address, I2CHost& i2c, gyro_fs_e gyro_scale, acc_fs_e acc_scale)
   : _address(address)
   , _i2c(i2c)
 {
@@ -77,13 +85,6 @@ MPU6050::MPU6050(uint8_t address, I2CHost& i2c, gyro_fs_t gyro_scale, acc_fs_t a
     0
     );
 
-  // set sampling rate
-  i2c.write_byte_to_register(
-    _address,
-    MPU6050_RA_SMPLRT_DIV,
-    MPU6050_DEFAULT_SAMPLE_RATE
-    );
-
   // set digital low pass filtering
   // 0 means none of that
   i2c.write_byte_to_register(
@@ -92,8 +93,19 @@ MPU6050::MPU6050(uint8_t address, I2CHost& i2c, gyro_fs_t gyro_scale, acc_fs_t a
     0
     );
 
+  // Set sampling rate. Because we
+  // don't have a digital low pass filtering,
+  // it would be 8KHz - and we are only
+  // interested in 1KHz for now
+  i2c.write_byte_to_register(
+    _address,
+    MPU6050_RA_SMPLRT_DIV,
+    7 // 1 + 7 is the actual divider
+    );
+
   set_gyro_scale(gyro_scale);
   set_acc_scale(acc_scale);
+  setup_fifo(FIFO_EN_NONE);
 }
 
 
@@ -135,7 +147,7 @@ bool MPU6050::calibrate(size_t iterations)
 }
 
 
-void MPU6050::set_gyro_scale(gyro_fs_t scale)
+void MPU6050::set_gyro_scale(gyro_fs_e scale)
 {
   auto gyro_range = _i2c.read_byte_from_register(
     _address,
@@ -167,7 +179,7 @@ void MPU6050::set_gyro_scale(gyro_fs_t scale)
   }
 }
 
-void MPU6050::set_acc_scale(acc_fs_t acc_scale)
+void MPU6050::set_acc_scale(acc_fs_e acc_scale)
 {
    uint8_t acc_range = _i2c.read_byte_from_register(
      _address,
@@ -216,7 +228,7 @@ std::array<uint8_t, 14> MPU6050::raw_sensor_data() const
   return raw;
 }
 
-MPU6050::gyro_data_t MPU6050::read_raw() const
+MPU6050::gyro_data_t MPU6050::read() const
 {
   gyro_data_t res;
   const auto raw = raw_sensor_data();
@@ -229,137 +241,62 @@ MPU6050::gyro_data_t MPU6050::read_raw() const
   return res;
 }
 
-
-/*
-
-#include "madgwick-ahrs.h"
-
-#include <string.h>
-
-#define GYRO_CALIBRATION_BUFFER_SIZE 10
-
-
-
-typedef struct {
-  mpu6050_gyro_fs_t gyro_fs;
-  mpu6050_acc_fs_t acc_fs;
-  uint8_t input_buffer[14]; // acc + temp + gyro data
-  float acc_correction;
-  float gyro_correction;
-} mpu6050_task_data_t;
-
-
-
-void newjoy_task_mpu6050(nj_task_def_t* task, uint8_t *buffer)
+void MPU6050::setup_fifo(fifo_e fifo_setup)
 {
-  mpu6050_task_data_t* task_data = (mpu6050_task_data_t*)task->task_data;
-  read_from_device_register_into_buffer(
-_i2c,
+  _i2c.write_byte_to_register(
     _address,
-    MPU6050_RA_ACCEL_XOUT_H,
-    task_data->input_buffer,
-    sizeof(task_data->input_buffer)
+    MPU6050_FIFO_EN,
+    fifo_setup
     );
-  // swap endianess
-  for(size_t i=0; i < 7; ++i)
+  auto user_ctrl = read_user_ctrl();
+  if(fifo_setup == FIFO_EN_NONE)
   {
-    uint8_t h = task_data->input_buffer[i*2];
-    task_data->input_buffer[i*2]= task_data->input_buffer[i*2 + 1];
-    task_data->input_buffer[i*2 + 1] = h;
+    user_ctrl &= ~FIFO_EN;
   }
-  float gyro_data[3];
-  float acc_data[3];
-
-  int16_t* word_access = (int16_t*)task_data->input_buffer;
-
-  switch(task_data->gyro_calbration_mode)
+  else
   {
-  case GYRO_UNCALIBRATED:
-  case GYRO_CALIBRATED:
-    for(size_t i=0; i < 3; ++i)
-    {
-      gyro_data[i] = ((float)(word_access[3 + 1 + i] - task_data->gyro_calibration[i])) / task_data->gyro_correction;
-      acc_data[i] = ((float)(word_access[i] - task_data->acc_calibration[i])) / task_data->acc_correction;
-    }
-    madgwick_ahrs_update_imu(
-      &task_data->filter_data,
-      gyro_data[0], gyro_data[1], gyro_data[2],
-      acc_data[0], acc_data[1], acc_data[2]
-      );
-    float* quaternion_data = (float*)buffer;
-    *quaternion_data++ = task_data->filter_data.q0;
-    *quaternion_data++ = task_data->filter_data.q1;
-    *quaternion_data++ = task_data->filter_data.q2;
-    *quaternion_data++ = task_data->filter_data.q3;
-    *quaternion_data++ = acc_data[0];
-    *quaternion_data++ = acc_data[1];
-    *quaternion_data++ = acc_data[2];
-    break;
+    user_ctrl |= FIFO_EN | FIFO_RESET;
   }
+  _i2c.write_byte_to_register(_address, MPU6050_RA_USER_CTRL, user_ctrl);
+  empty_fifo();
 }
 
 
-int newjoy_task_setup_mpu6050(nj_task_def_t* task, int period)
+size_t MPU6050::fifo_count() const
 {
-  int res;
-  uint8_t identity;
-  // first, identify ourselves. We should
-  // get our own address back.
-  res = read_byte_from_device_register(
-_i2c,
+  std::array<uint8_t, 2> raw; // acc + temp + gyro data
+  _i2c.read_from_device_register_into_buffer(
     _address,
-    MPU6050_RA_WHO_AM_I,
-    &identity
+    MPU6050_FIFO_COUNT_H,
+    raw
     );
-  if(res)
-  {
-    return res;
-  }
-  if(identity != MPU6050_DEFAULT_ADDRESS && identity != 0x72)
-  {
-    return -1;
-  }
-
-  mpu6050_task_data_t* task_data = task->task_data = malloc(sizeof(mpu6050_task_data_t));
-  // disable sleep mode and select clock source
-  i2c.write_byte_to_register(
-_i2c,
-    _address,
-    MPU6050_RA_PWR_MGMT_1,
-    MPU6050_CLOCK_PLL_XGYRO
-    );
-
-  // enable all sensors
-  i2c.write_byte_to_register(
-_i2c,
-    _address,
-    MPU6050_RA_PWR_MGMT_2,
-    0
-    );
-
-  // set sampling rate
-  i2c.write_byte_to_register(
-_i2c,
-    _address,
-    MPU6050_RA_SMPLRT_DIV,
-    MPU6050_DEFAULT_SAMPLE_RATE
-    );
-
-  // enable dlpf
-  i2c.write_byte_to_register(
-_i2c,
-    _address,
-    MPU6050_RA_CONFIG,
-    1
-    );
-
-
-  task_data->gyro_calibration_buffer_fill = 0;
-  task_data->gyro_calbration_mode = GYRO_UNCALIBRATED;
-  madgwick_ahrs_init(
-    &task_data->filter_data,
-    1000 / period // period is in ms
-    );
-  return 0;
+  return raw[0] << 8 | raw[1];
 }
-*/
+
+uint8_t MPU6050::read_user_ctrl() const
+{
+  return _i2c.read_byte_from_register(_address, MPU6050_RA_USER_CTRL);
+}
+
+
+void MPU6050::reset_fifo()
+{
+  const auto user_ctrl = read_user_ctrl();
+  _i2c.write_byte_to_register(_address, MPU6050_RA_USER_CTRL, user_ctrl | FIFO_RESET);
+}
+
+bool MPU6050::is_fifo_enabled()
+{
+  return read_user_ctrl() | FIFO_EN;
+}
+
+void MPU6050::empty_fifo()
+{
+  std::array<uint8_t, 1024> buffer;
+  _i2c.read_from_device_register_into_buffer(
+    _address, MPU6050_FIFO_RW,
+    buffer.data(),
+    fifo_count()
+    );
+  reset_fifo();
+}
