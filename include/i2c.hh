@@ -3,6 +3,9 @@
 
 #include <driver/i2c.h>
 
+void print_error(esp_err_t err);
+
+
 class I2CHost
 {
 public:
@@ -23,6 +26,7 @@ public:
     i2c_master_write_byte(cmd,  register_, 1);
     i2c_master_stop(cmd);
     err = i2c_master_cmd_begin(_i2c_num, cmd, 1000 / portTICK_RATE_MS);
+    print_error(err);
     assert(err == ESP_OK);
     i2c_cmd_link_delete(cmd);
     cmd = i2c_cmd_link_create();

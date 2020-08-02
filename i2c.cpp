@@ -2,16 +2,16 @@
 #include "i2c.hh"
 #include <esp_log.h>
 
-namespace {
-
 void print_error(esp_err_t err)
 {
+  if(err == ESP_OK)
+  {
+    return;
+  }
   char buffer[200];
   esp_err_to_name_r(err, buffer, sizeof(buffer));
   ESP_LOGE("i2c", "error: %s", buffer);
 }
-
-} // end ns anonymous
 
 I2CHost::I2CHost(i2c_port_t i2c_num, gpio_num_t sda, gpio_num_t scl)
   : _i2c_num(i2c_num)
