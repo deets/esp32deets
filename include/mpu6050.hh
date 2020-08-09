@@ -9,8 +9,6 @@
 #include <cstdint>
 #include <cstring>
 
-#define BE16BIT(p) ((p)[0] << 8 | (p)[1])
-
 class MPU6050
 {
 
@@ -52,69 +50,21 @@ public:
   void set_gyro_scale(gyro_fs_e);
   void set_acc_scale(acc_fs_e);
   bool calibrate(size_t iterations);
+  void calibrate_fifo_based();
   gyro_data_t read() const;
   void setup_fifo(fifo_e);
   size_t fifo_count() const;
   void empty_fifo();
   void reset_fifo();
   bool is_fifo_enabled() const;
+  size_t samplerate() const;
 
   template<typename T>
-  size_t read_fifo_into_buffer(T& readings)
-  {
-    static_assert(std::is_same<typename T::value_type, gyro_data_t>::value, "wrong container value type");
-
-    std::array<uint8_t, 1024> buffer;
-    auto current_fifo_count = fifo_count();
-    current_fifo_count -= current_fifo_count % _fifo_datagram_size;
-    assert(current_fifo_count % _fifo_datagram_size == 0);
-    const size_t count = std::min(
-      current_fifo_count / _fifo_datagram_size,
-      readings.size()
-      );
-
-    _i2c.read_from_device_register_into_buffer(
-      _address, MPU6050_FIFO_RW,
-      buffer.data(),
-      current_fifo_count
-    );
-    auto p = buffer.data();
-    for(size_t i=0; i < count; ++i)
-    {
-      auto& entry = readings[i];
-      std::memset(&entry, 0xff, sizeof(gyro_data_t));
-
-      if(FIFO_EN_ACCEL & _fifo_setup)
-      {
-        entry.acc[0] = float(BE16BIT(p) - _acc_calibration[0]) / _acc_correction;
-        entry.acc[1] = float(BE16BIT(p + 2) - _acc_calibration[1]) / _acc_correction;
-        entry.acc[2] = float(BE16BIT(p + 4) - _acc_calibration[2]) / _acc_correction;
-        p += 6;
-      }
-      if(FIFO_EN_TEMP & _fifo_setup)
-      {
-        p += 2;
-      }
-      if(FIFO_EN_XG & _fifo_setup)
-      {
-        entry.gyro[0] = float(BE16BIT(p) - _gyro_calibration[0]) / _gyro_correction;
-        p += 2;
-      }
-      if(FIFO_EN_YG & _fifo_setup)
-      {
-        entry.gyro[1] = float(BE16BIT(p) - _gyro_calibration[1]) / _gyro_correction;
-        p += 2;
-      }
-      if(FIFO_EN_ZG & _fifo_setup)
-      {
-        entry.gyro[2] = float(BE16BIT(p) - _gyro_calibration[2]) / _gyro_correction;
-        p += 2;
-      }
-    }
-    return count;
-  }
+  void consume_fifo(T callback);
 
 private:
+   uint8_t* populate_entry(uint8_t* p, gyro_data_t& entry);
+
   uint8_t read_user_ctrl() const;
 
   // byte-swapped but otherwise not touched
@@ -122,11 +72,13 @@ private:
 
   uint8_t _address;
   I2CHost _i2c;
-  // The correction factors to convert
+  // The scale factors to convert
   // from raw readings to d/s or m/s**2
-  float _gyro_correction;
-  float _acc_correction;
+  float _gyro_scale;
+  float _acc_scale;
   std::array<int16_t, 3> _gyro_calibration, _acc_calibration;
   size_t _fifo_datagram_size;
   fifo_e _fifo_setup;
 };
+
+#include "mpu6050.ipp"

@@ -5,6 +5,8 @@
 #include <cstring>
 #include <algorithm>
 
+#define BE16BIT(p) ((p)[0] << 8 | (p)[1])
+
 namespace {
 
 template<typename>
@@ -78,12 +80,14 @@ MPU6050::MPU6050(uint8_t address, I2CHost& i2c, gyro_fs_e gyro_scale, acc_fs_e a
   i2c.write_byte_to_register(
     _address,
     MPU6050_RA_SMPLRT_DIV,
-    7 // 1 + 7 is the actual divider
+    7 // 1 + X is the actual divider
     );
 
   set_gyro_scale(gyro_scale);
   set_acc_scale(acc_scale);
   setup_fifo(FIFO_EN_NONE);
+  _gyro_calibration.fill(0);
+  _acc_calibration.fill(0);
 }
 
 
@@ -124,6 +128,68 @@ bool MPU6050::calibrate(size_t iterations)
   return false;
 }
 
+void MPU6050::calibrate_fifo_based()
+{
+  std::array<int32_t, 6> accu;
+  accu.fill(0);
+  const auto sample_number = samplerate();
+  if(_fifo_setup == 0)
+  {
+    ESP_LOGE("mpu", "No FIFO configured, can't calibrate using FIFO");
+    return;
+  }
+
+  auto count = 0;
+  while(count < sample_number)
+  {
+    consume_fifo(
+      [this, &accu, &count](const MPU6050::gyro_data_t& entry)
+      {
+        if(_fifo_setup & FIFO_EN_ACCEL)
+        {
+          accu[0] += int32_t(entry.acc[0] * _acc_scale);
+          accu[1] += int32_t(entry.acc[1] * _acc_scale);
+          accu[2] += int32_t(entry.acc[2] * _acc_scale);
+        }
+        if(_fifo_setup & FIFO_EN_XG)
+        {
+          accu[3] += int32_t(entry.gyro[0] * _gyro_scale);
+        }
+        if(_fifo_setup & FIFO_EN_YG)
+        {
+          accu[4] += int32_t(entry.gyro[1] * _gyro_scale);
+        }
+        if(_fifo_setup & FIFO_EN_ZG)
+        {
+          accu[5] += int32_t(entry.gyro[2] * _gyro_scale);
+        }
+        // This must be counted in here, because
+        // we are counting *actual* entries consumed
+        ++count;
+      }
+      );
+  }
+  if(_fifo_setup & FIFO_EN_ACCEL)
+  {
+    _acc_calibration[0] = accu[0] / count;
+    _acc_calibration[1] = accu[1] / count;
+    _acc_calibration[2] = accu[2] / count;
+  }
+  if(_fifo_setup & FIFO_EN_XG)
+  {
+    _gyro_calibration[0] = accu[3] / count;
+  }
+  if(_fifo_setup & FIFO_EN_YG)
+  {
+    _gyro_calibration[1] = accu[4] / count;
+  }
+  if(_fifo_setup & FIFO_EN_ZG)
+  {
+    ESP_LOGI("mpu", "accu gz: %i, count: %i", accu[5], count);
+    _gyro_calibration[2] = accu[5] / count;
+  }
+}
+
 
 void MPU6050::set_gyro_scale(gyro_fs_e scale)
 {
@@ -143,16 +209,16 @@ void MPU6050::set_gyro_scale(gyro_fs_e scale)
   switch(scale)
   {
   case GYRO_250_FS:
-    _gyro_correction = 32768 / 250.0;
+    _gyro_scale = 32768 / 250.0;
     break;
   case GYRO_500_FS:
-    _gyro_correction = 32768 / 500.0;
+    _gyro_scale = 32768 / 500.0;
     break;
   case GYRO_1000_FS:
-    _gyro_correction = 32768 / 1000.0;
+    _gyro_scale = 32768 / 1000.0;
     break;
   case GYRO_2000_FS:
-    _gyro_correction = 32768 / 2000.0;
+    _gyro_scale = 32768 / 2000.0;
     break;
   }
 }
@@ -174,16 +240,16 @@ void MPU6050::set_acc_scale(acc_fs_e acc_scale)
   switch(acc_scale)
   {
   case ACC_2_FS:
-    _acc_correction = 32768.0 / 2;
+    _acc_scale = 32768.0 / 2;
     break;
   case ACC_4_FS:
-    _acc_correction = 32768.0 / 4;
+    _acc_scale = 32768.0 / 4;
     break;
   case ACC_8_FS:
-    _acc_correction = 32768.0 / 8;
+    _acc_scale = 32768.0 / 8;
     break;
   case ACC_16_FS:
-    _acc_correction = 32768.0 / 16;
+    _acc_scale = 32768.0 / 16;
     break;
   }
 }
@@ -213,8 +279,8 @@ MPU6050::gyro_data_t MPU6050::read() const
   const auto word_access = (const int16_t*)raw.data();
   for(size_t i=0; i < 3; ++i)
   {
-    res.gyro[i] = (float)(word_access[3 + 1 + i] - _gyro_calibration[i]) / _gyro_correction;
-    res.acc[i] = (float)(word_access[i] - _acc_calibration[i]) / _acc_correction;
+    res.gyro[i] = (float)(word_access[3 + 1 + i] - _gyro_calibration[i]) / _gyro_scale;
+    res.acc[i] = (float)(word_access[i] - _acc_calibration[i]) / _acc_scale;
   }
   return res;
 }
@@ -246,6 +312,7 @@ void MPU6050::setup_fifo(fifo_e fifo_setup)
   assert(!(FIFO_EN_SLV1 & fifo_setup));
   assert(!(FIFO_EN_SLV2 & fifo_setup));
   _fifo_setup = fifo_setup;
+  ESP_LOGI("mpu", "fifo_datagram_size: %i", _fifo_datagram_size);
   empty_fifo();
 }
 
@@ -259,6 +326,21 @@ size_t MPU6050::fifo_count() const
     raw
     );
   return raw[0] << 8 | raw[1];
+}
+
+size_t MPU6050::samplerate() const
+{
+  const auto divider = _i2c.read_byte_from_register(
+    _address,
+    MPU6050_RA_SMPLRT_DIV
+    ) + 1;
+  const auto digital_filter = _i2c.read_byte_from_register(
+    _address,
+    MPU6050_RA_CONFIG
+    ) & 0x7;
+
+  const auto output_rate = (digital_filter == 0 || digital_filter == 7) ? 8000 : 1000;
+  return output_rate / divider;
 }
 
 uint8_t MPU6050::read_user_ctrl() const
@@ -291,4 +373,35 @@ void MPU6050::empty_fifo()
       );
     reset_fifo();
   }
+}
+
+uint8_t* MPU6050::populate_entry(uint8_t* p, gyro_data_t& entry)
+{
+  if(FIFO_EN_ACCEL & _fifo_setup)
+  {
+    entry.acc[0] = float(BE16BIT(p) - _acc_calibration[0]) / _acc_scale;
+    entry.acc[1] = float(BE16BIT(p + 2) - _acc_calibration[1]) / _acc_scale;
+    entry.acc[2] = float(BE16BIT(p + 4) - _acc_calibration[2]) / _acc_scale;
+    p += 6;
+  }
+  if(FIFO_EN_TEMP & _fifo_setup)
+  {
+    p += 2;
+  }
+  if(FIFO_EN_XG & _fifo_setup)
+  {
+    entry.gyro[0] = float(BE16BIT(p) - _gyro_calibration[0]) / _gyro_scale;
+    p += 2;
+  }
+  if(FIFO_EN_YG & _fifo_setup)
+  {
+    entry.gyro[1] = float(BE16BIT(p) - _gyro_calibration[1]) / _gyro_scale;
+    p += 2;
+  }
+  if(FIFO_EN_ZG & _fifo_setup)
+  {
+    entry.gyro[2] = float(BE16BIT(p) - _gyro_calibration[2]) / _gyro_scale;
+    p += 2;
+  }
+  return p;
 }
