@@ -5,7 +5,7 @@
 #include <cstring>
 #include <algorithm>
 
-#define BE16BIT(p) ((p)[0] << 8 | (p)[1])
+#define BE16BIT(p) (int16_t((p)[0] << 8 | (p)[1]))
 
 namespace {
 
