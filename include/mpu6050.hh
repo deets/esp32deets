@@ -58,6 +58,7 @@ public:
   void reset_fifo();
   bool is_fifo_enabled() const;
   size_t samplerate() const;
+  void samplerate(uint8_t value);
 
   template<typename T>
   void consume_fifo(T callback);

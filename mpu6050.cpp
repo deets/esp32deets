@@ -77,17 +77,21 @@ MPU6050::MPU6050(uint8_t address, I2CHost& i2c, gyro_fs_e gyro_scale, acc_fs_e a
   // don't have a digital low pass filtering,
   // it would be 8KHz - and we are only
   // interested in 1KHz for now
-  i2c.write_byte_to_register(
-    _address,
-    MPU6050_RA_SMPLRT_DIV,
-    7 // 1 + X is the actual divider
-    );
-
+  samplerate(7);
   set_gyro_scale(gyro_scale);
   set_acc_scale(acc_scale);
   setup_fifo(FIFO_EN_NONE);
   _gyro_calibration.fill(0);
   _acc_calibration.fill(0);
+}
+
+void MPU6050::samplerate(uint8_t value)
+{
+  _i2c.write_byte_to_register(
+    _address,
+    MPU6050_RA_SMPLRT_DIV,
+    value // 1 + X is the actual divider
+    );
 }
 
 
@@ -400,7 +404,9 @@ uint8_t* MPU6050::populate_entry(uint8_t* p, gyro_data_t& entry)
   }
   if(FIFO_EN_ZG & _fifo_setup)
   {
-    entry.gyro[2] = float(BE16BIT(p) - _gyro_calibration[2]) / _gyro_scale;
+    const auto v = BE16BIT(p);
+    ESP_LOGI("main", "gz: %i, calibration: %i", v, _gyro_calibration[2]);
+    entry.gyro[2] = float(v - _gyro_calibration[2]) / _gyro_scale;
     p += 2;
   }
   return p;
