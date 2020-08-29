@@ -105,7 +105,8 @@ void I2CHost::read_from_device_register_into_buffer(uint8_t address, uint8_t reg
   i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_READ, 1);
   i2c_master_read(cmd, buffer, length, I2C_MASTER_LAST_NACK);
   i2c_master_stop(cmd);
-  err = i2c_master_cmd_begin(_i2c_num, cmd, 1000 / portTICK_RATE_MS);
+  err = i2c_master_cmd_begin(_i2c_num, cmd, portMAX_DELAY);
+  ESP_ERROR_CHECK(err);
   assert(err == ESP_OK);
   i2c_cmd_link_delete(cmd);
 }
