@@ -1,0 +1,16 @@
+menu "deets ESP32 library"
+
+
+config DEETS_WIFI_NETWORK_CONFIG
+   string "Network configuration"
+   default ""
+   help
+      A string of <ssid>:<password>[, ...]
+
+config DEETS_WIFI_MAXIMUM_RETRY
+   int "Maximum WIFI retry"
+   default 5
+   help
+      Set the Maximum retry to avoid station reconnecting to the AP unlimited when the AP is really inexistent.
+            
+endmenu
