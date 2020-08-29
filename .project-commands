@@ -1,0 +1,3 @@
+:compilation-directory "../.."
+:compile-command '(absolute "esp32commander build")
+
