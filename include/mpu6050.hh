@@ -56,7 +56,8 @@ public:
   size_t fifo_count() const;
   void empty_fifo();
   void reset_fifo();
-  bool is_fifo_enabled() const;
+  bool fifo_enabled() const;
+  bool fifo_overflown() const;
   size_t samplerate() const;
   void samplerate(uint8_t value);
 

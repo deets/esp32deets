@@ -359,9 +359,14 @@ void MPU6050::reset_fifo()
   _i2c.write_byte_to_register(_address, MPU6050_RA_USER_CTRL, user_ctrl | FIFO_RESET);
 }
 
-bool MPU6050::is_fifo_enabled() const
+bool MPU6050::fifo_enabled() const
 {
   return read_user_ctrl() | FIFO_EN;
+}
+
+bool MPU6050::fifo_overflown() const
+{
+  return _i2c.read_byte_from_register(_address, MPU6050_INT_STATUS) & MPU6050_FIFO_OVERFLOW_INT;
 }
 
 void MPU6050::empty_fifo()
@@ -405,7 +410,6 @@ uint8_t* MPU6050::populate_entry(uint8_t* p, gyro_data_t& entry)
   if(FIFO_EN_ZG & _fifo_setup)
   {
     const auto v = BE16BIT(p);
-    ESP_LOGI("main", "gz: %i, calibration: %i", v, _gyro_calibration[2]);
     entry.gyro[2] = float(v - _gyro_calibration[2]) / _gyro_scale;
     p += 2;
   }
