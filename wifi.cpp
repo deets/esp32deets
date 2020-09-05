@@ -116,3 +116,9 @@ void setup_wifi()
   assert(network_config.size() == 1);
   wifi_init_sta(network_config[0].ssid, network_config[0].password);
 }
+
+
+bool wifi_connected()
+{
+  return xEventGroupGetBits(s_wifi_event_group) | WIFI_CONNECTED_BIT;
+}

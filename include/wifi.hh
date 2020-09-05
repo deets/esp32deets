@@ -2,3 +2,4 @@
 #pragma once
 
 void setup_wifi();
+bool wifi_connected();
