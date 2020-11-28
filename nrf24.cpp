@@ -4,6 +4,7 @@
 #include <esp_timer.h>
 #include <driver/uart.h>
 #include <esp_log.h>
+#include <hal/spi_types.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -294,8 +295,9 @@ void NRF24::dump_pipe_addresses()
 }
 
 
-NRF24::NRF24(gpio_num_t ce, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio_num_t miso, int speed, const char local_address[5])
+NRF24::NRF24(spi_host_device_t spi_host, gpio_num_t ce, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio_num_t miso, int speed, const char local_address[5])
   : _ce(ce)
+  , _spi_host(spi_host)
 {
   int res;
   esp_err_t spi_res;
@@ -333,9 +335,9 @@ NRF24::NRF24(gpio_num_t ce, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio
   };
 
   //Initialize the SPI bus
-  spi_res = spi_bus_initialize(VSPI_HOST, &buscfg, 1);
+  spi_res = spi_bus_initialize(_spi_host, &buscfg, 1);
   SPI_ERROR_CHECK;
-  spi_res = spi_bus_add_device(VSPI_HOST, &devcfg, &_spi);
+  spi_res = spi_bus_add_device(_spi_host, &devcfg, &_spi);
   SPI_ERROR_CHECK;
 
   // from here on, the __init__ of nrf24l01.py is lifted
@@ -363,7 +365,7 @@ NRF24::NRF24(gpio_num_t ce, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio
 NRF24::~NRF24()
 {
   spi_bus_remove_device(_spi);
-  spi_bus_free(VSPI_HOST);
+  spi_bus_free(_spi_host);
 }
 
 

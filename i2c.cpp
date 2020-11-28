@@ -19,8 +19,8 @@ I2CHost::I2CHost(i2c_port_t i2c_num, gpio_num_t sda, gpio_num_t scl)
   i2c_config_t config = {
     .mode=I2C_MODE_MASTER,
     .sda_io_num=sda,
-    .sda_pullup_en=GPIO_PULLUP_ENABLE,
     .scl_io_num=scl,
+    .sda_pullup_en=GPIO_PULLUP_ENABLE,
     .scl_pullup_en=GPIO_PULLUP_ENABLE,
   };
   config.master.clk_speed = 400000;
@@ -59,7 +59,7 @@ uint8_t I2CHost::read_byte_from_register(uint8_t address, uint8_t register_) con
   i2c_master_write_byte(cmd,  register_, 1);
   i2c_master_stop(cmd);
   err = i2c_master_cmd_begin(_i2c_num, cmd, 1000 / portTICK_RATE_MS);
-  assert(err == ESP_OK);
+  //assert(err == ESP_OK);
   i2c_cmd_link_delete(cmd);
   cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
@@ -67,7 +67,7 @@ uint8_t I2CHost::read_byte_from_register(uint8_t address, uint8_t register_) con
   i2c_master_read_byte(cmd, &res, i2c_ack_type_t(1));
   i2c_master_stop(cmd);
   err = i2c_master_cmd_begin(_i2c_num, cmd, 1000 / portTICK_RATE_MS);
-  assert(err == ESP_OK);
+//  assert(err == ESP_OK);
   i2c_cmd_link_delete(cmd);
   return res;
 }
@@ -83,7 +83,7 @@ void I2CHost::write_byte_to_register(uint8_t address, uint8_t register_, uint8_t
   i2c_master_write_byte(cmd,  value, 1);
   i2c_master_stop(cmd);
   err = i2c_master_cmd_begin(_i2c_num, cmd, 1000 / portTICK_RATE_MS);
-  assert(err == ESP_OK);
+  // assert(err == ESP_OK);
   i2c_cmd_link_delete(cmd);
 }
 
@@ -98,7 +98,7 @@ void I2CHost::read_from_device_register_into_buffer(uint8_t address, uint8_t reg
   i2c_master_stop(cmd);
   err = i2c_master_cmd_begin(_i2c_num, cmd, 1000 / portTICK_RATE_MS);
   print_error(err);
-  assert(err == ESP_OK);
+  // assert(err == ESP_OK);
   i2c_cmd_link_delete(cmd);
   cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
@@ -107,6 +107,6 @@ void I2CHost::read_from_device_register_into_buffer(uint8_t address, uint8_t reg
   i2c_master_stop(cmd);
   err = i2c_master_cmd_begin(_i2c_num, cmd, portMAX_DELAY);
   ESP_ERROR_CHECK(err);
-  assert(err == ESP_OK);
+  // assert(err == ESP_OK);
   i2c_cmd_link_delete(cmd);
 }

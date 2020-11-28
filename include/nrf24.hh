@@ -2,6 +2,7 @@
 #pragma once
 
 #include <driver/spi_master.h>
+#include <driver/gpio.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -72,7 +73,7 @@ struct nrf24_error_info_t
 class NRF24
 {
 public:
-  NRF24(gpio_num_t ce, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio_num_t miso, int speed, const char local_address[5]);
+  NRF24(spi_host_device_t spi_host, gpio_num_t ce, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio_num_t miso, int speed, const char local_address[5]);
   ~NRF24();
 
   uint8_t reg_read(uint8_t register);
@@ -121,4 +122,5 @@ private:
 
   gpio_num_t _ce;
 
+  spi_host_device_t _spi_host;
 };

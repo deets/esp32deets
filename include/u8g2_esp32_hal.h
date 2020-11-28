@@ -28,16 +28,18 @@ extern "C" {
 #define ACK_CHECK_DIS  0x0                 //  I2C master will not check ack from slave
 
 typedef struct {
-	gpio_num_t clk;
-	gpio_num_t mosi;
-	gpio_num_t sda; // data for I²C
-	gpio_num_t scl; // clock for I²C
-	gpio_num_t cs;
-	gpio_num_t reset;
-	gpio_num_t dc;
+  gpio_num_t clk;
+  gpio_num_t mosi;
+  gpio_num_t sda; // data for I²C
+  gpio_num_t scl; // clock for I²C
+  gpio_num_t cs;
+  gpio_num_t reset;
+  gpio_num_t dc;
+  spi_host_device_t spi_host;
+  int dma_channel;
 } u8g2_esp32_hal_t ;
 
-#define U8G2_ESP32_HAL_DEFAULT {U8G2_ESP32_HAL_UNDEFINED, U8G2_ESP32_HAL_UNDEFINED, U8G2_ESP32_HAL_UNDEFINED, U8G2_ESP32_HAL_UNDEFINED, U8G2_ESP32_HAL_UNDEFINED, U8G2_ESP32_HAL_UNDEFINED, U8G2_ESP32_HAL_UNDEFINED }
+#define U8G2_ESP32_HAL_DEFAULT {U8G2_ESP32_HAL_UNDEFINED, U8G2_ESP32_HAL_UNDEFINED, U8G2_ESP32_HAL_UNDEFINED, U8G2_ESP32_HAL_UNDEFINED, U8G2_ESP32_HAL_UNDEFINED, U8G2_ESP32_HAL_UNDEFINED, U8G2_ESP32_HAL_UNDEFINED, SPI2_HOST, int(SPI2_HOST) }
 
 void u8g2_esp32_hal_init(u8g2_esp32_hal_t u8g2_esp32_hal_param);
 uint8_t u8g2_esp32_spi_byte_cb(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr);
