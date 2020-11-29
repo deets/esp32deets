@@ -5,6 +5,7 @@
 #include <cstring>
 #include <algorithm>
 #include <numeric>
+#include <array>
 
 #define BE16BIT(p) (int16_t((p)[0] << 8 | (p)[1]))
 

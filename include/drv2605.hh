@@ -1,5 +1,9 @@
 // Copyright: 2020, Diez B. Roggisch, Berlin, all rights reserved
 #pragma once
+#include <sdkconfig.h>
+#ifndef CONFIG_DEETS_USE_DRV2605
+#error "CONFIG_DEETS_USE_DRV2605 not set!"
+#endif
 
 #include "i2c.hh"
 

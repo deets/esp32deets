@@ -4,9 +4,13 @@
  *  Created on: Feb 12, 2017
  *      Author: kolban
  */
+#include <sdkconfig.h>
+#ifndef CONFIG_DEETS_USE_U8G2
+#error "CONFIG_DEETS_USE_U8G2 not set!"
+#endif
 
-#ifndef U8G2_ESP32_HAL_H_
-#define U8G2_ESP32_HAL_H_
+#pragma once
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -49,5 +53,3 @@ uint8_t u8g2_esp32_gpio_and_delay_cb(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* U8G2_ESP32_HAL_H_ */

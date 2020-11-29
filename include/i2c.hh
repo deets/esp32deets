@@ -1,4 +1,8 @@
 // Copyright: 2020, Diez B. Roggisch, Berlin, all rights reserved
+#include <sdkconfig.h>
+#ifndef CONFIG_DEETS_USE_I2C
+#error "CONFIG_DEETS_USE_I2C not set!"
+#endif
 #pragma once
 
 #include <driver/i2c.h>

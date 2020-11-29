@@ -12,5 +12,37 @@ config DEETS_WIFI_MAXIMUM_RETRY
    default 5
    help
       Set the Maximum retry to avoid station reconnecting to the AP unlimited when the AP is really inexistent.
-            
+
+config DEETS_USE_U8G2
+   bool "Use U8G2 display library"
+   default n
+   help
+      If defined, pull in the U8G2 display library.
+
+config DEETS_USE_I2C
+   bool "Use I2C abstraction"
+   default n
+   help
+      If defined, pull in the I2C abstraction
+
+config DEETS_USE_MPU6050
+   bool "Use MPU6050"
+   default n
+   select DEETS_USE_I2C
+   help
+      If defined, pull in the MPU6050
+
+config DEETS_USE_NRF24
+   bool "Use NRF24P01 radio transceiver"
+   default n
+   help
+      If defined, pull in the NRF24 radio transceiver
+
+config DEETS_USE_DRV2605
+   bool "Use DRV2605 haptics processor"
+   default n
+   select DEETS_USE_I2C   
+   help
+      If defined, pull in the DRV2605 haptics processor
+
 endmenu

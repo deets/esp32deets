@@ -1,4 +1,9 @@
 // Copyright: 2020, Diez B. Roggisch, Berlin, all rights reserved
+#include <sdkconfig.h>
+#ifndef CONFIG_DEETS_USE_MPU6050
+#error "CONFIG_DEETS_USE_MPU6050 not set!"
+#endif
+
 #pragma once
 #include "mpu6050-regs.hh"
 
