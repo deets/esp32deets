@@ -8,7 +8,7 @@ if(CONFIG_DEETS_USE_U8G2)
 endif()
 
 if(CONFIG_DEETS_USE_MPU6050)
-  list(APPEND srcs mpu6050.cpp)
+  list(APPEND srcs mpu6050.cpp madgwick.cpp)
 endif()
 
 if(CONFIG_DEETS_USE_I2C)

@@ -67,7 +67,7 @@ public:
   void samplerate(uint8_t value);
 
   template<typename T>
-  void consume_fifo(T callback);
+  size_t consume_fifo(T callback);
 
 private:
    uint8_t* populate_entry(uint8_t* p, gyro_data_t& entry);

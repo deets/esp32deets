@@ -3,7 +3,7 @@
 
 
 template<typename T>
-void MPU6050::consume_fifo(T callback)
+size_t MPU6050::consume_fifo(T callback)
 {
   std::array<uint8_t, 1024> buffer;
   const auto current_fifo_count = fifo_count();
@@ -12,7 +12,7 @@ void MPU6050::consume_fifo(T callback)
   //ESP_LOGI("mpu", "current_fifo_count: %i, datagram_count: %i", current_fifo_count, datagram_count);
   if(datagram_count == 0)
   {
-    return;
+    return 0;
   }
 
 
@@ -30,4 +30,6 @@ void MPU6050::consume_fifo(T callback)
     p = populate_entry(p, entry);
     callback(entry);
   }
+
+  return datagram_count;
 }
