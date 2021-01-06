@@ -3,8 +3,11 @@ set(
   wifi.cpp
   )
 
+set(requirements "")
+
 if(CONFIG_DEETS_USE_U8G2)
   list(APPEND srcs u8g2_esp32_hal.c ssd1306.c)
+  list(APPEND requirements u8g2)
 endif()
 
 if(CONFIG_DEETS_USE_MPU6050)
@@ -28,5 +31,5 @@ idf_component_register(
   .
   SRCS ${srcs}
   INCLUDE_DIRS "include"
-  REQUIRES u8g2
+  REQUIRES ${requirements}
   )
