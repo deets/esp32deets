@@ -18,6 +18,10 @@ if(CONFIG_DEETS_USE_I2C)
   list(APPEND srcs i2c.cpp)
 endif()
 
+if(CONFIG_DEETS_USE_TCA9548A)
+  list(APPEND srcs tca9548a.cpp)
+endif()
+
 if(CONFIG_DEETS_USE_NRF24)
   list(APPEND srcs nrf24.cpp)
 endif()

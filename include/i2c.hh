@@ -14,6 +14,7 @@ void print_error(esp_err_t err);
 
 class I2C {
 public:
+  virtual void write_byte(uint8_t address, uint8_t value) const = 0;
   virtual uint8_t read_byte_from_register(uint8_t address, uint8_t register_) const = 0;
   virtual void write_byte_to_register(uint8_t address, uint8_t register_, uint8_t value) const = 0;
   virtual void read_from_device_register_into_buffer(uint8_t address, uint8_t register_, uint8_t* buffer, size_t length) const = 0;
@@ -33,6 +34,7 @@ public:
   I2CHost(i2c_port_t i2c_num, gpio_num_t sda, gpio_num_t scl);
   ~I2CHost();
 
+  void write_byte(uint8_t address, uint8_t value) const override;
   uint8_t read_byte_from_register(uint8_t address, uint8_t register_) const override;
   void write_byte_to_register(uint8_t address, uint8_t register_, uint8_t value) const override;
   void read_from_device_register_into_buffer(uint8_t address, uint8_t register_, uint8_t* buffer, size_t length) const override;

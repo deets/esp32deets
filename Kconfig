@@ -45,4 +45,11 @@ config DEETS_USE_DRV2605
    help
       If defined, pull in the DRV2605 haptics processor
 
+config DEETS_USE_TCA9548A
+   bool "Use TCA9548A I2C mux"
+   default n
+   select DEETS_USE_I2C
+   help
+      If defined, pull in the TCA9548A I2C bus multiplexer
+
 endmenu
