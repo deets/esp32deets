@@ -1,6 +1,7 @@
 // Copyright: 2020, Diez B. Roggisch, Berlin, all rights reserved
 #include "i2c.hh"
 #include <esp_log.h>
+#include <vector>
 
 void print_error(esp_err_t err)
 {
@@ -39,7 +40,6 @@ I2CHost::I2CHost(i2c_port_t i2c_num, gpio_num_t sda, gpio_num_t scl)
     0  // alloc flags, currently ignored
     );
   assert(err == ESP_OK);
-
 }
 
 I2CHost::~I2CHost()
@@ -109,4 +109,22 @@ void I2CHost::read_from_device_register_into_buffer(uint8_t address, uint8_t reg
   ESP_ERROR_CHECK(err);
   // assert(err == ESP_OK);
   i2c_cmd_link_delete(cmd);
+}
+
+std::vector<uint8_t> I2CHost::scan() const
+{
+  std::vector<uint8_t> res;
+  for(uint8_t address=0; address < 128; ++address)
+  {
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_WRITE, 1);
+    i2c_master_stop(cmd);
+    const auto result = i2c_master_cmd_begin(_i2c_num, cmd, portMAX_DELAY);
+    if(result == ESP_OK)
+    {
+      res.push_back(address);
+    }
+  }
+  return res;
 }
