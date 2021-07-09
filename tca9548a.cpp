@@ -30,10 +30,24 @@ void TCA9548A::WrappedBus::write_byte_to_register(uint8_t address,
   _bus.write_byte_to_register(address, register_, value);
 }
 
+void TCA9548A::WrappedBus::write_buffer_to_address(uint8_t address,
+                                                   const uint8_t *buffer,
+                                                   size_t len) const {
+  _mux.select(_busno);
+  _bus.write_buffer_to_address(address, buffer, len);
+}
+
 void TCA9548A::WrappedBus::read_from_device_register_into_buffer(uint8_t address, uint8_t register_, uint8_t* buffer, size_t length) const
 {
   _mux.select(_busno);
   _bus.read_from_device_register_into_buffer(address, register_, buffer, length);
+}
+
+void TCA9548A::WrappedBus::read_from_address_into_buffer(uint8_t address, uint8_t *buffer,
+                                   size_t length) const
+{
+  _mux.select(_busno);
+  _bus.read_from_address_into_buffer(address, buffer, length);
 }
 
 std::vector<uint8_t> TCA9548A::WrappedBus::scan() const

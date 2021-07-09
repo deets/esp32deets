@@ -52,4 +52,11 @@ config DEETS_USE_TCA9548A
    help
       If defined, pull in the TCA9548A I2C bus multiplexer
 
+config DEETS_USE_SHT3XDIS
+   bool "Use SHT3XDIS humidity/temperature sensor"
+   default n
+   select DEETS_USE_I2C
+   help
+      If defined, pull in SHT3XDIS sensor
+
 endmenu

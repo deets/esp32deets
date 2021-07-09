@@ -30,6 +30,10 @@ if(CONFIG_DEETS_USE_DRV2605)
   list(APPEND srcs drv2605.cpp)
 endif()
 
+if(CONFIG_DEETS_USE_SHT3XDIS)
+  list(APPEND srcs sht3xdis.cpp)
+endif()
+
 
 idf_component_register(
   .

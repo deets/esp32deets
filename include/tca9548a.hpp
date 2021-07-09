@@ -12,7 +12,9 @@ class TCA9548A
     void write_byte(uint8_t address, uint8_t value) const override;
     uint8_t read_byte_from_register(uint8_t address, uint8_t register_) const override;
     void write_byte_to_register(uint8_t address, uint8_t register_, uint8_t value) const override;
+    void write_buffer_to_address(uint8_t address, const uint8_t* buffer, size_t len) const override;
     void read_from_device_register_into_buffer(uint8_t address, uint8_t register_, uint8_t* buffer, size_t length) const override;
+    void read_from_address_into_buffer(uint8_t address, uint8_t *buffer, size_t length) const override;
     std::vector<uint8_t> scan() const override;
 
   private:
