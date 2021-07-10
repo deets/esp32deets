@@ -6,6 +6,8 @@
 
 class I2C;
 
+namespace sht3xdis {
+
 struct RawValues
 {
   uint16_t humidity;
@@ -37,3 +39,5 @@ private:
   I2C& _bus;
   uint8_t _address;
 };
+
+}

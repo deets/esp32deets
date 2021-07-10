@@ -6,6 +6,8 @@
 
 #include <array>
 
+namespace sht3xdis {
+
 namespace {
 
 const auto MEASUREMENT_TIME = 20; // ms, according to datasheet, 15. I add a bit extra.
@@ -64,4 +66,6 @@ uint16_t SHT3XDIS::status()
   std::array<uint8_t, 3> buffer;
   _bus.read_from_address_into_buffer(_address, buffer.data(), buffer.size());
   return buffer[0] << 8 | buffer[1];
+}
+
 }
