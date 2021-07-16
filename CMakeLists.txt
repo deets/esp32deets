@@ -7,7 +7,7 @@ set(requirements "")
 
 if(CONFIG_DEETS_USE_U8G2)
   list(APPEND srcs u8g2_esp32_hal.c ssd1306.c)
-  list(APPEND requirements u8g2)
+  # APPEND requirements u8g2
 endif()
 
 if(CONFIG_DEETS_USE_MPU6050)
@@ -34,10 +34,15 @@ if(CONFIG_DEETS_USE_SHT3XDIS)
   list(APPEND srcs sht3xdis.cpp)
 endif()
 
+if(CONFIG_DEETS_USE_HTTP)
+  list(APPEND srcs http.cpp)
+  list(APPEND requirements esp_http_server)
+endif()
+
 
 idf_component_register(
   .
   SRCS ${srcs}
   INCLUDE_DIRS "include"
-  REQUIRES ${requirements}
+  REQUIRES "esp_http_server ${requirements}"
   )

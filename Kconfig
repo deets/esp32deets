@@ -59,4 +59,10 @@ config DEETS_USE_SHT3XDIS
    help
       If defined, pull in SHT3XDIS sensor
 
+config DEETS_USE_HTTP
+   bool "Use embedded HTTP server"
+   default n
+   help
+     If defined, pull in the http server component
+     
 endmenu
