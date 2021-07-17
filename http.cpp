@@ -6,12 +6,20 @@
 #include <esp_log.h>
 
 #include <cstring>
+#include <tuple>
+#include <sstream>
 
 namespace deets::http {
 
 namespace {
+
 #define TAG "http"
 
+const auto ACCESS_CONTROL_ALLOW_ORIGIN = "Access-Control-Allow-Origin";
+const auto ACCESS_CONTROL_MAX_AGE = "Access-Control-Max-Age";
+const auto ACCESS_CONTROL_ALLOW_METHODS = "Access-Control-Allow-Methods";
+const auto ALL_METHODS = "PUT,POST,GET,OPTIONS";
+const auto ACCESS_CONTROL_ALLOW_HEADERS = "Access-Control-Allow-Headers";
 
 }
 
@@ -57,10 +65,42 @@ esp_err_t HTTPServer::s_dispatch(httpd_req_t *req)
 esp_err_t HTTPServer::dispatch(httpd_req_t *req) {
   if(_handlers.count(req->uri))
   {
+    preflight(req);
     auto& mapping = _handlers[req->uri];
-    return mapping.callback(req);
+    if(auto pval = std::get_if<std::function<esp_err_t(httpd_req_t*)>>(&mapping.callback))
+    {
+      return (*pval)(req);
+    }
+    if(auto pval = std::get_if<std::function<json(const json&)>>(&mapping.callback))
+    {
+      json body;
+      const auto result = (*pval)(body);
+      const auto s = result.dump();
+      httpd_resp_set_type(req, "text/json");
+      httpd_resp_send(req, s.c_str(), s.size());
+      return ESP_OK;
+    }
   }
   return ESP_FAIL;
+}
+
+void HTTPServer::set_cors(const std::string& origin, uint32_t timeout)
+{
+  std::stringstream ss;
+  ss << timeout;
+  _cors = std::make_tuple(origin, ss.str());
+}
+
+void HTTPServer::preflight(httpd_req_t *req)
+{
+  if(_cors)
+  {
+    const auto& [ origin, age ] = *_cors;
+    httpd_resp_set_hdr(req, ACCESS_CONTROL_ALLOW_ORIGIN, origin.c_str());
+    httpd_resp_set_hdr(req, ACCESS_CONTROL_MAX_AGE, age.c_str());
+    httpd_resp_set_hdr(req, ACCESS_CONTROL_ALLOW_METHODS, ALL_METHODS);
+    httpd_resp_set_hdr(req, ACCESS_CONTROL_ALLOW_HEADERS, "*");
+  }
 }
 
 } // namespace deets::http
