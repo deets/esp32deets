@@ -21,6 +21,12 @@ namespace {
 
 const char *TAG = "wifi-sta";
 
+struct network_entry_t
+{
+  std::string ssid;
+  std::string password;
+};
+
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
 
@@ -46,7 +52,7 @@ void event_handler(void* arg, esp_event_base_t event_base,
 
 
 
-void wifi_init_sta(const std::string& ssid, const std::string& password)
+void wifi_init_sta(std::vector<network_entry_t> preconfigured_networks)
 {
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
                                                         ESP_EVENT_ANY_ID,
@@ -67,24 +73,23 @@ void wifi_init_sta(const std::string& ssid, const std::string& password)
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
     wifi_config_t wifi_config = {};
-    strncpy(reinterpret_cast<char*>(&wifi_config.sta.ssid[0]), ssid.c_str(), sizeof(wifi_config.sta.ssid));
-    strncpy(reinterpret_cast<char*>(&wifi_config.sta.password[0]), password.c_str(), sizeof(wifi_config.sta.password));
+    if(preconfigured_networks.size())
+    {
+      const auto ssid = preconfigured_networks[0].ssid;
+      const auto password = preconfigured_networks[0].password;
+
+      strncpy(reinterpret_cast<char*>(&wifi_config.sta.ssid[0]), ssid.c_str(), sizeof(wifi_config.sta.ssid));
+      strncpy(reinterpret_cast<char*>(&wifi_config.sta.password[0]), password.c_str(), sizeof(wifi_config.sta.password));
+      ESP_LOGI(TAG, "connect to ap SSID:%s password:%s",
+	       ssid.c_str(), password.c_str());
+    }
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start() );
 
     ESP_LOGI(TAG, "wifi_init_sta finished.");
-    ESP_LOGI(TAG, "connect to ap SSID:%s password:%s",
-             ssid.c_str(), password.c_str());
-
 }
-
-struct network_entry_t
-{
-  std::string ssid;
-  std::string password;
-};
 
 std::vector<network_entry_t> parse_network_config(const char* config)
 {
@@ -110,8 +115,7 @@ void setup_wifi()
 {
   ESP_LOGI(TAG, CONFIG_DEETS_WIFI_NETWORK_CONFIG);
   const auto network_config = parse_network_config(CONFIG_DEETS_WIFI_NETWORK_CONFIG);
-  assert(network_config.size() == 1);
-  wifi_init_sta(network_config[0].ssid, network_config[0].password);
+  wifi_init_sta(network_config);
 }
 
 
