@@ -45,11 +45,10 @@ void event_handler(void* arg, esp_event_base_t event_base,
       esp_wifi_connect();
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
+        ESP_LOGI(TAG, "IP_EVENT, IP_EVENT_STA_GOT_IP, got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
 }
-
 
 
 void wifi_init_sta(std::vector<network_entry_t> preconfigured_networks)
@@ -72,20 +71,19 @@ void wifi_init_sta(std::vector<network_entry_t> preconfigured_networks)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-    wifi_config_t wifi_config = {};
     if(preconfigured_networks.size())
     {
+      wifi_config_t wifi_config = {};
       const auto ssid = preconfigured_networks[0].ssid;
       const auto password = preconfigured_networks[0].password;
-
       strncpy(reinterpret_cast<char*>(&wifi_config.sta.ssid[0]), ssid.c_str(), sizeof(wifi_config.sta.ssid));
       strncpy(reinterpret_cast<char*>(&wifi_config.sta.password[0]), password.c_str(), sizeof(wifi_config.sta.password));
       ESP_LOGI(TAG, "connect to ap SSID:%s password:%s",
 	       ssid.c_str(), password.c_str());
+      ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
     }
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start() );
 
     ESP_LOGI(TAG, "wifi_init_sta finished.");
