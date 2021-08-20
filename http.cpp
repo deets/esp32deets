@@ -79,9 +79,11 @@ esp_err_t HTTPServer::dispatch(httpd_req_t *req) {
       json body;
       if(const auto content_type = header_value(req, "Content-Type"))
       {
-	if(*content_type == "application/json")
+	const auto content_type_value = *content_type;
+	ESP_LOGD(TAG, "Content-type: %s, %i", content_type_value.c_str(), content_type_value.size());
+	if(content_type_value == "application/json")
 	{
-	  ESP_LOGI(TAG, "Got application/json, %i bytes", req->content_len);
+	  ESP_LOGD(TAG, "Got application/json, %i bytes", req->content_len);
 	  std::vector<char> buffer(req->content_len);
 	  httpd_req_recv(req, buffer.data(), buffer.size());
 	  body = body.parse(buffer.begin(), buffer.end());
@@ -105,7 +107,7 @@ std::optional<std::string> HTTPServer::header_value(httpd_req_t *req, const std:
     std::vector<char> buffer(len + 1);
     httpd_req_get_hdr_value_str(req, header.c_str(), buffer.data(), buffer.size());
     ESP_LOGD(TAG, "value: %s", buffer.data());
-    return std::string(buffer.data(), buffer.size());
+    return std::string(buffer.data(), buffer.size() - 1);
   }
   ESP_LOGD(TAG, "no header %s", header.c_str());
   return std::nullopt;
