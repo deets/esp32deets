@@ -1,13 +1,16 @@
 // Copyright: 2021, Diez B. Roggisch, Berlin, all rights reserved
 
 #include "http.hpp"
+#include <optional>
 
-#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+//#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #include <esp_log.h>
 
 #include <cstring>
 #include <tuple>
 #include <sstream>
+
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
 namespace deets::http {
 
@@ -74,6 +77,16 @@ esp_err_t HTTPServer::dispatch(httpd_req_t *req) {
     if(auto pval = std::get_if<std::function<json(const json&)>>(&mapping.callback))
     {
       json body;
+      if(const auto content_type = header_value(req, "Content-Type"))
+      {
+	if(*content_type == "application/json")
+	{
+	  ESP_LOGI(TAG, "Got application/json, %i bytes", req->content_len);
+	  std::vector<char> buffer(req->content_len);
+	  httpd_req_recv(req, buffer.data(), buffer.size());
+	  body = body.parse(buffer.begin(), buffer.end());
+	}
+      }
       const auto result = (*pval)(body);
       const auto s = result.dump();
       httpd_resp_set_type(req, "text/json");
@@ -82,6 +95,20 @@ esp_err_t HTTPServer::dispatch(httpd_req_t *req) {
     }
   }
   return ESP_FAIL;
+}
+
+std::optional<std::string> HTTPServer::header_value(httpd_req_t *req, const std::string &header)
+{
+  if(const auto len = httpd_req_get_hdr_value_len(req, header.c_str()))
+  {
+    ESP_LOGD(TAG, "found header, length: %i", len);
+    std::vector<char> buffer(len + 1);
+    httpd_req_get_hdr_value_str(req, header.c_str(), buffer.data(), buffer.size());
+    ESP_LOGD(TAG, "value: %s", buffer.data());
+    return std::string(buffer.data(), buffer.size());
+  }
+  ESP_LOGD(TAG, "no header %s", header.c_str());
+  return std::nullopt;
 }
 
 void HTTPServer::set_cors(const std::string& origin, uint32_t timeout)

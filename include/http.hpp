@@ -40,6 +40,7 @@ private:
   esp_err_t dispatch(httpd_req_t *req);
 
   void preflight(httpd_req_t*);
+  std::optional<std::string> header_value(httpd_req_t *req, const std::string&);
 
   httpd_handle_t _server = nullptr;
   std::map<std::string, handler_mapping_t> _handlers;
