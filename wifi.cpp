@@ -28,7 +28,7 @@ struct network_entry_t
 };
 
 /* FreeRTOS event group to signal when we are connected*/
-static EventGroupHandle_t s_wifi_event_group;
+static EventGroupHandle_t s_wifi_event_group = nullptr;
 
 /* The event group allows multiple bits for each event, but we only care about one event
  * - are we connected to the AP with an IP? */
@@ -63,9 +63,6 @@ void wifi_init_sta(std::vector<network_entry_t> preconfigured_networks)
                                                         &event_handler,
                                                         NULL,
                                                         NULL));
-
-    s_wifi_event_group = xEventGroupCreate();
-
     esp_netif_init();
     esp_netif_create_default_wifi_sta();
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -111,7 +108,8 @@ std::vector<network_entry_t> parse_network_config(const char* config)
 
 void setup_wifi()
 {
-  ESP_LOGI(TAG, CONFIG_DEETS_WIFI_NETWORK_CONFIG);
+  s_wifi_event_group = xEventGroupCreate();
+  ESP_LOGI(TAG, "sdkconfig network config: %s", CONFIG_DEETS_WIFI_NETWORK_CONFIG);
   const auto network_config = parse_network_config(CONFIG_DEETS_WIFI_NETWORK_CONFIG);
   wifi_init_sta(network_config);
 }
@@ -119,5 +117,5 @@ void setup_wifi()
 
 bool wifi_connected()
 {
-  return xEventGroupGetBits(s_wifi_event_group) | WIFI_CONNECTED_BIT;
+  return xEventGroupGetBits(s_wifi_event_group) & WIFI_CONNECTED_BIT;
 }
