@@ -87,8 +87,10 @@ void wifi_init_sta(std::vector<network_entry_t> preconfigured_networks)
       const auto password = preconfigured_networks[0].password;
       strncpy(reinterpret_cast<char*>(&wifi_config.sta.ssid[0]), ssid.c_str(), sizeof(wifi_config.sta.ssid));
       strncpy(reinterpret_cast<char*>(&wifi_config.sta.password[0]), password.c_str(), sizeof(wifi_config.sta.password));
+      wifi_config.sta.pmf_cfg = { true, false };
       ESP_LOGI(TAG, "connect to ap SSID:%s password:%s",
 	       ssid.c_str(), password.c_str());
+      esp_wifi_set_mode(WIFI_MODE_STA);
       ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
     }
 
