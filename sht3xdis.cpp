@@ -32,6 +32,17 @@ SHT3XDIS::SHT3XDIS(I2C &bus, uint8_t address)
 {
 }
 
+
+float SHT3XDIS::raw2humidity(uint16_t humidity)
+{
+  return float(float(humidity) * 100 / 65535.0);
+}
+
+float SHT3XDIS::raw2temperature(uint16_t temperature)
+{
+  return float(float(temperature) * 175.0 / 65535.0 - 45.0);
+}
+
 RawValues SHT3XDIS::raw_values()
 {
   _bus.write_buffer_to_address(_address, MEASUREMENT.data(), MEASUREMENT.size());
@@ -39,14 +50,18 @@ RawValues SHT3XDIS::raw_values()
 
   std::array<uint8_t, 6> buffer;
   _bus.read_from_address_into_buffer(_address, buffer.data(), buffer.size());
-  const auto humidity = uint16_t(buffer[0] << 8 | buffer[1]);
-  const auto temp = uint16_t(buffer[3] << 8 | buffer[4]);
+  const auto temp = uint16_t(buffer[0] << 8 | buffer[1]);
+  const auto humidity = uint16_t(buffer[3] << 8 | buffer[4]);
   return { humidity, temp };
 }
 
 Values SHT3XDIS::values()
 {
-  return { 0.0, 0.0 };
+  const auto raw = raw_values();
+  return {
+    raw2humidity(raw.humidity),
+    raw2temperature(raw.temperature)
+  };
 }
 
 

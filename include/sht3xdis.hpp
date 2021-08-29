@@ -34,6 +34,9 @@ public:
   void clear();
   uint16_t status();
 
+  static float raw2humidity(uint16_t humidity);
+  static float raw2temperature(uint16_t temperature);
+
 private:
 
   I2C& _bus;
