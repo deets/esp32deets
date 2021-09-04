@@ -59,7 +59,7 @@ private:
   std::optional<std::string> header_value(httpd_req_t *req, const std::string&);
 
   httpd_handle_t _server = nullptr;
-  std::map<std::string, handler_mapping_t> _handlers;
+  std::map<std::tuple<std::string, httpd_method_t>, handler_mapping_t> _handlers;
   std::optional<std::tuple<std::string, std::string>> _cors;
 };
 

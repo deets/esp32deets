@@ -52,7 +52,7 @@ void HTTPServer::start()
 
 void HTTPServer::register_handler(const char* path, httpd_method_t method, handler_callback_t callback)
 {
-  auto& mapping = _handlers[path];
+  auto& mapping = _handlers[{path, method}];
   mapping.handler_definition = std::move(callback);
   std::memset(&mapping.esp_handler, 0, sizeof(mapping.esp_handler));
   mapping.esp_handler.method = method;
@@ -63,7 +63,7 @@ void HTTPServer::register_handler(const char* path, httpd_method_t method, handl
 
 void HTTPServer::register_handler(const char *path, uint8_t *start,
                                   uint8_t *end, ContentType content_type) {
-  auto& mapping = _handlers[path];
+  auto& mapping = _handlers[{path, HTTP_GET}];
   const auto handler = handler_static_content_t { start, end, content_type };
   mapping.handler_definition = std::move(handler);
   std::memset(&mapping.esp_handler, 0, sizeof(mapping.esp_handler));
@@ -79,11 +79,12 @@ esp_err_t HTTPServer::s_dispatch(httpd_req_t *req)
 }
 
 esp_err_t HTTPServer::dispatch(httpd_req_t *req) {
-  if(_handlers.count(req->uri))
+  const auto key = std::tuple<std::string, httpd_method_t>(req->uri, httpd_method_t(req->method));
+  if(_handlers.count(key))
   {
     preflight(req);
 
-    auto& mapping = _handlers[req->uri];
+    auto& mapping = _handlers[key];
     if(auto pcallback_val = std::get_if<handler_callback_t>(&mapping.handler_definition))
     {
       return serve_callback(req, *pcallback_val);
