@@ -17,6 +17,9 @@
 #include <sstream>
 #include <string>
 
+//#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+//#include "esp_log.h"
+
 namespace {
 
 const char *TAG = "wifi-sta";
@@ -38,10 +41,10 @@ void event_handler(void* arg, esp_event_base_t event_base,
 		   int32_t event_id, void* event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-      ESP_LOGE(TAG, "WIFI_EVENT, WIFI_EVENT_STA_START");
+      ESP_LOGD(TAG, "WIFI_EVENT, WIFI_EVENT_STA_START");
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-      ESP_LOGE(TAG, "WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED");
+      ESP_LOGD(TAG, "WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED");
       esp_wifi_connect();
     } else if (event_base == IP_EVENT)
     {
@@ -88,7 +91,7 @@ void wifi_init_sta(std::vector<network_entry_t> preconfigured_networks)
       strncpy(reinterpret_cast<char*>(&wifi_config.sta.ssid[0]), ssid.c_str(), sizeof(wifi_config.sta.ssid));
       strncpy(reinterpret_cast<char*>(&wifi_config.sta.password[0]), password.c_str(), sizeof(wifi_config.sta.password));
       wifi_config.sta.pmf_cfg = { true, false };
-      ESP_LOGI(TAG, "connect to ap SSID:%s password:%s",
+      ESP_LOGD(TAG, "connect to ap SSID:%s password:%s",
 	       ssid.c_str(), password.c_str());
       esp_wifi_set_mode(WIFI_MODE_STA);
       ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
@@ -97,7 +100,7 @@ void wifi_init_sta(std::vector<network_entry_t> preconfigured_networks)
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
     ESP_ERROR_CHECK(esp_wifi_start() );
 
-    ESP_LOGI(TAG, "wifi_init_sta finished.");
+    ESP_LOGD(TAG, "wifi_init_sta finished.");
 }
 
 std::vector<network_entry_t> parse_network_config(const char* config)
@@ -107,7 +110,7 @@ std::vector<network_entry_t> parse_network_config(const char* config)
   std::istringstream tokenStream(config);
   while(std::getline(tokenStream, token, ','))
   {
-    ESP_LOGI(TAG, "found WIFI configuration entry: %s", token.c_str());
+    ESP_LOGD(TAG, "found WIFI configuration entry: %s", token.c_str());
     std::istringstream part_stream(token);
     network_entry_t entry;
     std::getline(part_stream, entry.ssid, ':');
@@ -123,7 +126,7 @@ std::vector<network_entry_t> parse_network_config(const char* config)
 void setup_wifi()
 {
   s_wifi_event_group = xEventGroupCreate();
-  ESP_LOGI(TAG, "sdkconfig network config: %s", CONFIG_DEETS_WIFI_NETWORK_CONFIG);
+  ESP_LOGD(TAG, "sdkconfig network config: %s", CONFIG_DEETS_WIFI_NETWORK_CONFIG);
   const auto network_config = parse_network_config(CONFIG_DEETS_WIFI_NETWORK_CONFIG);
   wifi_init_sta(network_config);
 }
