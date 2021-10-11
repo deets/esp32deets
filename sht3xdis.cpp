@@ -83,4 +83,12 @@ uint16_t SHT3XDIS::status()
   return buffer[0] << 8 | buffer[1];
 }
 
+Values Values::from_raw(const RawValues &raw)
+{
+  return Values {
+    SHT3XDIS::raw2humidity(raw.humidity),
+    SHT3XDIS::raw2temperature(raw.temperature)
+  };
+}
+
 }

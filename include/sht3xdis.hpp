@@ -18,6 +18,7 @@ struct Values
 {
   float humidity;
   float temperature;
+  static Values from_raw(const RawValues&);
 };
 
 class SHT3XDIS
