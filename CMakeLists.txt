@@ -2,6 +2,7 @@ set(
   srcs
   wifi.cpp
   flash.cpp
+  smartconfig.cpp
   buttons.cpp
   )
 
