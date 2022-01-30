@@ -1,6 +1,7 @@
 set(
   srcs
   wifi.cpp
+  buttons.cpp
   )
 
 set(requirements "")
