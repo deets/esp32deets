@@ -1,10 +1,11 @@
 set(
   srcs
   wifi.cpp
+  flash.cpp
   buttons.cpp
   )
 
-set(requirements "")
+set(requirements nvs_flash)
 
 if(CONFIG_DEETS_USE_U8G2)
   list(APPEND srcs u8g2_esp32_hal.c ssd1306.c)

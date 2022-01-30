@@ -1,4 +1,5 @@
-#include "wifi.hh"
+#include "wifi.hpp"
+#include "flash.hpp"
 
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -20,7 +21,11 @@
 //#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 //#include "esp_log.h"
 
+namespace deets::wifi {
+
 namespace {
+
+bool s_initialized = false;
 
 const char *TAG = "wifi-sta";
 
@@ -123,16 +128,37 @@ std::vector<network_entry_t> parse_network_config(const char* config)
 } // end ns anon
 
 
-void setup_wifi()
+void setup()
 {
-  s_wifi_event_group = xEventGroupCreate();
-  ESP_LOGD(TAG, "sdkconfig network config: %s", CONFIG_DEETS_WIFI_NETWORK_CONFIG);
-  const auto network_config = parse_network_config(CONFIG_DEETS_WIFI_NETWORK_CONFIG);
-  wifi_init_sta(network_config);
+  if(!s_initialized)
+  {
+    s_initialized = true;
+
+    deets::flash::init();
+
+    s_wifi_event_group = xEventGroupCreate();
+    ESP_LOGD(TAG, "sdkconfig network config: %s", CONFIG_DEETS_WIFI_NETWORK_CONFIG);
+    const auto network_config = parse_network_config(CONFIG_DEETS_WIFI_NETWORK_CONFIG);
+    wifi_init_sta(network_config);
+  }
+  else
+  {
+    ESP_LOGE(TAG, "setup called twice!");
+  }
 }
 
 
-bool wifi_connected()
+bool connected()
 {
-  return xEventGroupGetBits(s_wifi_event_group) & WIFI_CONNECTED_BIT;
+  if(s_initialized)
+  {
+    return xEventGroupGetBits(s_wifi_event_group) & WIFI_CONNECTED_BIT;
+  }
+  else
+  {
+    ESP_LOGE(TAG, "setup not called");
+    return false;
+  }
 }
+
+} // namespace deets::wifi
