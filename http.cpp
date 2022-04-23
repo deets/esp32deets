@@ -11,7 +11,7 @@
 #include <tuple>
 #include <sstream>
 
-#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+//#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
 namespace deets::http {
 
