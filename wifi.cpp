@@ -9,6 +9,7 @@
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_idf_version.h"
 
 #include "lwip/err.h"
 #include "lwip/sys.h"
@@ -99,7 +100,11 @@ void wifi_init_sta(std::vector<network_entry_t> preconfigured_networks)
       ESP_LOGD(TAG, "connect to ap SSID:%s password:%s",
 	       ssid.c_str(), password.c_str());
       esp_wifi_set_mode(WIFI_MODE_STA);
+      #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
+      ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
+      #else
       ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
+      #endif
     }
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
