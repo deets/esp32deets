@@ -38,6 +38,12 @@ config DEETS_USE_NRF24
    help
       If defined, pull in the NRF24 radio transceiver
 
+config DEETS_USE_RF95
+   bool "Use RF95 LoRa transceiver"
+   default n
+   help
+      If defined, pull in the RF95 radio transceiver
+
 config DEETS_USE_DRV2605
    bool "Use DRV2605 haptics processor"
    default n

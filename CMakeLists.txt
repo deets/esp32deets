@@ -29,6 +29,10 @@ if(CONFIG_DEETS_USE_NRF24)
   list(APPEND srcs nrf24.cpp)
 endif()
 
+if(CONFIG_DEETS_USE_RF95)
+  list(APPEND srcs rf95.cpp)
+endif()
+
 if(CONFIG_DEETS_USE_DRV2605)
   list(APPEND srcs drv2605.cpp)
 endif()
