@@ -1,4 +1,5 @@
 #include "rf95.hpp"
+#include "buttons.hpp"
 #include "driver/spi_common.h"
 
 #include <freertos/FreeRTOS.h>
@@ -16,6 +17,7 @@
 #define RH_RF95_PA_DAC_DISABLE 0x04
 #define RH_RF95_PA_DAC_ENABLE  0x07
 #define RH_RF95_PA_SELECT 0x80
+#define IRQ_BIT (1 << 0)
 
 // The crystal oscillator frequency of the module
 #define RH_RF95_FXOSC 32000000.0
@@ -47,16 +49,15 @@ uint8_t operator | (const RF95::op_reg& left, const RF95::op_reg& right)
 }
 
 RF95::RF95(spi_host_device_t spi_host, gpio_num_t cs, gpio_num_t sck,
-           gpio_num_t mosi, gpio_num_t miso, int speed)
+           gpio_num_t mosi, gpio_num_t miso, int speed, gpio_num_t irq)
   : _spi_host(spi_host)
-  , _cs(cs)
 {
   int res;
   esp_err_t spi_res;
 
-  gpio_pad_select_gpio(_cs);
-  gpio_set_level(_cs, 0);
-  gpio_set_direction(_cs, GPIO_MODE_OUTPUT);
+  gpio_pad_select_gpio(cs);
+  gpio_set_level(cs, 0);
+  gpio_set_direction(cs, GPIO_MODE_OUTPUT);
 
   spi_bus_config_t buscfg = {
     mosi, // mosi_io_num
@@ -96,6 +97,24 @@ RF95::RF95(spi_host_device_t spi_host, gpio_num_t cs, gpio_num_t sck,
   spi_res = spi_bus_add_device(_spi_host, &devcfg, &_spi);
   SPI_ERROR_CHECK;
 
+  _irq_event_group = xEventGroupCreate();
+
+  deets::buttons::setup_pin(
+    {
+      irq,
+      deets::buttons::pull_e::DOWN,
+      deets::buttons::irq_e::POS,
+      0
+    }
+    );
+  deets::buttons::register_button_callback(
+    gpio_num_t(26),
+    [this](gpio_num_t) {
+      xEventGroupSetBits(_irq_event_group, IRQ_BIT);
+    }
+    );
+
+
   setup();
 }
 
@@ -128,7 +147,7 @@ void RF95::setup()
 }
 
 
-void RF95::send(const uint8_t *buffer, size_t len) {
+void RF95::send(const uint8_t *buffer, size_t len, int timeout) {
   mode(IDLE);
   // if (!waitCAD())
   //   return false;  // Check channel activity
@@ -143,8 +162,27 @@ void RF95::send(const uint8_t *buffer, size_t len) {
   // The message data
   //spiBurstWrite(RH_RF95_REG_00_FIFO, data, len);
 
+  xEventGroupClearBits(
+    _irq_event_group,
+    IRQ_BIT
+    );
   reg_write(register_t::PAYLOAD_LENGTH, 4);
   mode(TX);
+  const auto bits = xEventGroupWaitBits(
+    _irq_event_group,
+    IRQ_BIT,
+    pdFALSE,
+    pdFALSE,
+    timeout / portTICK_PERIOD_MS);
+
+  if(!bits)
+  {
+    ESP_LOGE(TAG, "IRQ didn't arrive in time");
+  }
+  else
+  {
+    ESP_LOGI(TAG, "TX acknowledged by IRQ");
+  }
 }
 
 
@@ -204,6 +242,11 @@ void RF95::mode(mode_t mode)
     reg_write(register_t::OP_MODE, uint8_t(op_reg::STDBY));
     break;
   case TX:
+    // According to table 18, this should give us TX done on DIO0, the only pin
+    // broken out to the ESP.
+    reg_write(register_t::DIO_MAPPING_1, 0x01 << 6);
+    // Clear IRQs
+    reg_write(register_t::IRQ_FLAGS, 0xFF);
     reg_write(register_t::OP_MODE, uint8_t(op_reg::TX));
     break;
   }

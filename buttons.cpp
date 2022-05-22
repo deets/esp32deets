@@ -25,7 +25,6 @@ namespace {
 
 ESP_EVENT_DEFINE_BASE(DEETS_BUTTON_EVENTS);
 
-const int DEBOUNCE = (200 * 1000);
 
 std::unordered_map<int, uint64_t> s_debounces;
 
@@ -57,56 +56,71 @@ void s_button_event_handler(void *event_handler_arg,
   }
 }
 
+void register_isr_handler()
+{
+  static bool registered = false;
+  // install global GPIO ISR handler
+  ESP_LOGD(TAG, "Enable ISR service");
+
+  if(!registered)
+  {
+    gpio_install_isr_service(0);
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(
+                      DEETS_BUTTON_EVENTS,
+                      ESP_EVENT_ANY_ID,
+                      s_button_event_handler, nullptr, nullptr));
+    registered = true;
+  }
+}
+
 } // end ns anonymous
 
 
+void setup_pin(const gpio_config_t& pin)
+{
+  register_isr_handler();
+  ESP_LOGD(TAG, "Setup pin %i", pin.num);
+  gpio_set_direction(pin.num, gpio_mode_t(GPIO_MODE_DEF_INPUT));
+  switch(pin.pull)
+  {
+  case pull_e::NONE:
+    gpio_pullup_dis(pin.num);
+    gpio_pulldown_dis(pin.num);
+    break;
+  case pull_e::UP:
+    gpio_pullup_en(pin.num);
+    break;
+  case pull_e::DOWN:
+    gpio_pulldown_en(pin.num);
+    break;
+  }
+  switch(pin.irq)
+  {
+  case irq_e::NONE:
+    break;
+  case irq_e::POS:
+    ESP_ERROR_CHECK(gpio_set_intr_type(pin.num, GPIO_INTR_POSEDGE));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(pin.num, gpio_isr_handler, (void*)pin.num));
+    break;
+  case irq_e::NEG:
+    ESP_ERROR_CHECK(gpio_set_intr_type(pin.num, GPIO_INTR_NEGEDGE));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(pin.num, gpio_isr_handler, (void*)pin.num));
+    break;
+  case irq_e::ANY:
+    ESP_ERROR_CHECK(gpio_set_intr_type(pin.num, GPIO_INTR_ANYEDGE));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(pin.num, gpio_isr_handler, (void*)pin.num));
+    break;
+  }
+  //fill map to avoid allocates in ISR
+  s_last[pin.num] = esp_timer_get_time();
+  s_debounces[pin.num] = pin.debounce;
+}
+
 void setup(std::initializer_list<gpio_config_t> config)
 {
-  // install global GPIO ISR handler
-  ESP_LOGD(TAG, "Enable ISR service");
-  gpio_install_isr_service(0);
-  ESP_ERROR_CHECK(esp_event_handler_instance_register(
-		    DEETS_BUTTON_EVENTS,
-		    ESP_EVENT_ANY_ID,
-		    s_button_event_handler, nullptr, nullptr));
-
-  int64_t ts = esp_timer_get_time();
   for(const auto pin : config)
   {
-    ESP_LOGD(TAG, "Setup pin %i", pin.num);
-    gpio_set_direction(pin.num, gpio_mode_t(GPIO_MODE_DEF_INPUT));
-    switch(pin.pull)
-    {
-    case pull_e::NONE:
-      gpio_pullup_dis(pin.num);
-      gpio_pulldown_dis(pin.num);
-      break;
-    case pull_e::UP:
-      gpio_pullup_en(pin.num);
-      break;
-    case pull_e::DOWN:
-      gpio_pulldown_en(pin.num);
-      break;
-    }
-    switch(pin.irq)
-    {
-    case irq_e::NONE:
-      break;
-    case irq_e::POS:
-      ESP_ERROR_CHECK(gpio_set_intr_type(pin.num, GPIO_INTR_POSEDGE));
-      ESP_ERROR_CHECK(gpio_isr_handler_add(pin.num, gpio_isr_handler, (void*)pin.num));
-      break;
-    case irq_e::NEG:
-      ESP_ERROR_CHECK(gpio_set_intr_type(pin.num, GPIO_INTR_NEGEDGE));
-      ESP_ERROR_CHECK(gpio_isr_handler_add(pin.num, gpio_isr_handler, (void*)pin.num));
-      break;
-    case irq_e::ANY:
-      ESP_ERROR_CHECK(gpio_set_intr_type(pin.num, GPIO_INTR_ANYEDGE));
-      ESP_ERROR_CHECK(gpio_isr_handler_add(pin.num, gpio_isr_handler, (void*)pin.num));
-      break;
-    }
-    //fill map to avoid allocates in ISR
-    s_last[pin.num] = ts;
+    setup_pin(pin);
   }
 }
 

@@ -9,15 +9,19 @@
 
 namespace deets::buttons {
 
+
 enum class pull_e { NONE, UP, DOWN };
 enum class irq_e { NONE, POS, NEG, ANY };
+
 struct gpio_config_t
 {
   gpio_num_t num;
   pull_e pull;
   irq_e irq;
+  int debounce; // in microseconds
 };
 
+void setup_pin(const gpio_config_t& pin);
 void setup(std::initializer_list<gpio_config_t> config);
 
 void register_button_callback(gpio_num_t num,

@@ -4,6 +4,9 @@
 #include <driver/spi_master.h>
 #include <driver/gpio.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
+
 #include <sched.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -25,6 +28,8 @@ public:
     FREQ_MSB = 0x06,
     FREQ_MID = 0x07,
     FREQ_LSB = 0x08,
+    DIO_MAPPING_1 = 0x40,
+    DIO_MAPPING_2 = 0x41,
     PA_CONFIG = 0x09,
     PA_DAC = 0x4D,
     FIFO_ADDR_PTR = 0xD,
@@ -35,6 +40,8 @@ public:
     MODEM_CONFIG_3 = 0x26,
     PREAMBLE_MSB = 0x20,
     PREAMBLE_LSB = 0x21,
+    IRQ_MASK=0x11,
+    IRQ_FLAGS=0x12,
   };
 
   enum class op_reg : uint8_t
@@ -48,12 +55,12 @@ public:
     RX = 0b101,
   };
 
-  RF95(spi_host_device_t spi_host, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio_num_t miso, int speed);
+  RF95(spi_host_device_t spi_host, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio_num_t miso, int speed, gpio_num_t irq);
   ~RF95();
 
   uint8_t reg_read(register_t register_);
   void reg_write(register_t register_, uint8_t value);
-  void send(const uint8_t* buffer, size_t len);
+  void send(const uint8_t* buffer, size_t len, int timeout);
 private:
   void mode(mode_t mode);
   void setup();
@@ -65,8 +72,6 @@ private:
 
   spi_host_device_t _spi_host;
   spi_device_handle_t _spi;
-  gpio_num_t _cs;
-  gpio_num_t _irq;
 
-
+  EventGroupHandle_t _irq_event_group;
 };
