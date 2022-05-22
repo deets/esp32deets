@@ -68,7 +68,7 @@ private:
   void preamble_length(uint16_t);
   void frequency(float);
   void tx_power(int);
-
+  void buffer_write(register_t register_, const uint8_t *buffer, size_t len);
 
   spi_host_device_t _spi_host;
   spi_device_handle_t _spi;

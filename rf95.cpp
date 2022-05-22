@@ -17,6 +17,8 @@
 #define RH_RF95_PA_DAC_DISABLE 0x04
 #define RH_RF95_PA_DAC_ENABLE  0x07
 #define RH_RF95_PA_SELECT 0x80
+#define RH_RF95_FIFO_SIZE 0xff
+
 #define IRQ_BIT (1 << 0)
 
 // The crystal oscillator frequency of the module
@@ -69,7 +71,7 @@ RF95::RF95(spi_host_device_t spi_host, gpio_num_t cs, gpio_num_t sck,
     -1, // data5_io_num
     -1, // data6_io_num
     -1, // data7_io_num
-    0, // max_transfer_sz
+    0, // max_transfer_sz, which is SOC_SPI_MAXIMUM_BUFFER_SIZE
     0, // flags
     0 // intr_flags
   };
@@ -139,7 +141,6 @@ void RF95::setup()
     reg_write(reg, 0);
   }
   mode(IDLE);
-
   modem_config({ 0x72, 0x74, 0x04});
   preamble_length(8);
   frequency(868.0);
@@ -149,24 +150,21 @@ void RF95::setup()
 
 void RF95::send(const uint8_t *buffer, size_t len, int timeout) {
   mode(IDLE);
+  assert(len <= RH_RF95_FIFO_SIZE);
+
+
   // if (!waitCAD())
   //   return false;  // Check channel activity
 
-  // Position at the beginning of the FIFO
+  // Reset FIFO positio
   reg_write(register_t::FIFO_ADDR_PTR, 0);
-  // The headers
-  reg_write(register_t::FIFO, 0xAA);
-  reg_write(register_t::FIFO, 0x55);
-  reg_write(register_t::FIFO, 0xFF);
-  reg_write(register_t::FIFO, 0x33);
-  // The message data
-  //spiBurstWrite(RH_RF95_REG_00_FIFO, data, len);
+  buffer_write(register_t::FIFO, buffer, len);
 
   xEventGroupClearBits(
     _irq_event_group,
     IRQ_BIT
     );
-  reg_write(register_t::PAYLOAD_LENGTH, 4);
+  reg_write(register_t::PAYLOAD_LENGTH, len);
   mode(TX);
   const auto bits = xEventGroupWaitBits(
     _irq_event_group,
@@ -280,4 +278,29 @@ void RF95::reg_write(register_t register_, uint8_t value)
   t.flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_USE_RXDATA;
   res = spi_device_transmit(_spi, &t);
   ESP_ERROR_CHECK(res);
+}
+
+void RF95::buffer_write(register_t register_, const uint8_t *buffer, size_t len)
+{
+  esp_err_t res;
+  struct spi_transaction_t t;
+  std::array<uint8_t, RH_RF95_FIFO_SIZE + 1> txdata;
+
+  txdata[0] = (uint8_t(register_) & 0x7f) | 0x80; // force write
+  std::copy(buffer, buffer + len, &txdata[1]);
+
+  len += 1; // correct for first register byte
+  size_t offset = 0;
+  while(len)
+  {
+    const auto to_copy = std::min(len, size_t(SOC_SPI_MAXIMUM_BUFFER_SIZE));
+
+    std::memset(&t, 0, sizeof(t));
+    t.length = 8 * to_copy;
+    t.tx_buffer = txdata.data() + offset;
+    res = spi_device_transmit(_spi, &t);
+    ESP_ERROR_CHECK(res);
+    len -= to_copy;
+    offset += to_copy;
+  }
 }
