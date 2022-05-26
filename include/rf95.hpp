@@ -17,7 +17,9 @@ class RF95
 public:
   enum mode_t {
     IDLE,
-    TX
+    TX,
+    RX,
+    CAD, // Channel Active Detection
   };
 
   enum class register_t : uint8_t
@@ -53,6 +55,7 @@ public:
     TX = 0b011,
     FSRX = 0b100,
     RX = 0b101,
+    CAD = 0b111,
   };
 
   RF95(spi_host_device_t spi_host, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio_num_t miso, int speed, gpio_num_t irq);
@@ -61,6 +64,8 @@ public:
   uint8_t reg_read(register_t register_);
   void reg_write(register_t register_, uint8_t value);
   void send(const uint8_t* buffer, size_t len, int timeout);
+  bool channel_active();
+
 private:
   void mode(mode_t mode);
   void setup();

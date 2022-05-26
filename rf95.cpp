@@ -18,6 +18,7 @@
 #define RH_RF95_PA_DAC_ENABLE  0x07
 #define RH_RF95_PA_SELECT 0x80
 #define RH_RF95_FIFO_SIZE 0xff
+#define RH_RF95_CAD_DETECTED 0x01
 
 #define IRQ_BIT (1 << 0)
 
@@ -242,13 +243,42 @@ void RF95::mode(mode_t mode)
   case TX:
     // According to table 18, this should give us TX done on DIO0, the only pin
     // broken out to the ESP.
-    reg_write(register_t::DIO_MAPPING_1, 0x01 << 6);
+    reg_write(register_t::DIO_MAPPING_1, 0b01 << 6);
     // Clear IRQs
     reg_write(register_t::IRQ_FLAGS, 0xFF);
     reg_write(register_t::OP_MODE, uint8_t(op_reg::TX));
     break;
+  case CAD:
+    // According to table 18, this should give us CAD done on DIO0, the only pin
+    // broken out to the ESP.
+    reg_write(register_t::DIO_MAPPING_1, 0b10 << 6);
+    // Clear IRQs
+    reg_write(register_t::IRQ_FLAGS, 0xFF);
+    reg_write(register_t::OP_MODE, uint8_t(op_reg::CAD));
+    break;
   }
 }
+
+
+bool RF95::channel_active()
+{
+  xEventGroupClearBits(
+    _irq_event_group,
+    IRQ_BIT
+    );
+  mode(CAD);
+  const auto bits = xEventGroupWaitBits(
+    _irq_event_group,
+    IRQ_BIT,
+    pdFALSE,
+    pdFALSE,
+    10000 / portTICK_PERIOD_MS);
+  // We expect this to always return!
+  assert(bits);
+  const auto irq_flags = reg_read(register_t::IRQ_FLAGS);
+  return irq_flags & RH_RF95_CAD_DETECTED;
+}
+
 
 
 uint8_t RF95::reg_read(register_t register_)
