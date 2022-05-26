@@ -153,9 +153,12 @@ void RF95::send(const uint8_t *buffer, size_t len, int timeout) {
   mode(IDLE);
   assert(len <= RH_RF95_FIFO_SIZE);
 
-
-  // if (!waitCAD())
-  //   return false;  // Check channel activity
+  // I wait potentially indefinitely until the channel
+  // is detected to be clear
+  while(channel_active())
+  {
+    vTaskDelay(1 / portTICK_PERIOD_MS);
+  }
 
   // Reset FIFO positio
   reg_write(register_t::FIFO_ADDR_PTR, 0);
@@ -184,7 +187,7 @@ void RF95::send(const uint8_t *buffer, size_t len, int timeout) {
   }
 }
 
-size_t RF95::recv(const uint8_t *buffer)
+size_t RF95::recv(std::array<uint8_t, FIFO_SIZE>& buffer)
 {
   xEventGroupClearBits(
     _irq_event_group,
@@ -202,7 +205,10 @@ size_t RF95::recv(const uint8_t *buffer)
 
   if(bits)
   {
-    return reg_read(register_t::RX_NUM_BYTES);
+    const auto bytes_read = reg_read(register_t::RX_NUM_BYTES);
+    reg_write(register_t::FIFO_ADDR_PTR, reg_read(register_t::FIFO_RX_CURRENT_ADDR));
+    buffer_read(register_t::FIFO, buffer.data(), bytes_read);
+    return bytes_read;
   }
   return 0;
 }
@@ -364,4 +370,31 @@ void RF95::buffer_write(register_t register_, const uint8_t *buffer, size_t len)
     len -= to_copy;
     offset += to_copy;
   }
+}
+
+
+void RF95::buffer_read(register_t register_, uint8_t *buffer, size_t len)
+{
+  esp_err_t res;
+  struct spi_transaction_t t;
+  std::array<uint8_t, RH_RF95_FIFO_SIZE + 1> rxdata{0};
+  std::array<uint8_t, RH_RF95_FIFO_SIZE + 1> txdata{0};
+  txdata[0] = uint8_t(register_) & 0x7f; // force read
+
+  auto total  = len + 1; // correct for register
+  decltype(total) offset = 0;
+  while(total)
+  {
+    const auto to_copy = std::min(total, size_t(SOC_SPI_MAXIMUM_BUFFER_SIZE));
+    std::memset(&t, 0, sizeof(t));
+    t.length = 8 * to_copy;
+    t.tx_buffer = txdata.data() + offset;
+    t.rx_buffer = rxdata.data() + offset;
+    res = spi_device_transmit(_spi, &t);
+    ESP_ERROR_CHECK(res);
+    offset += to_copy;
+    total -= to_copy;
+  }
+  // Offset the register that is always zero
+  std::copy(rxdata.data() + 1, rxdata.data() + len + 1, buffer);
 }
