@@ -44,6 +44,7 @@ public:
     PREAMBLE_LSB = 0x21,
     IRQ_MASK=0x11,
     IRQ_FLAGS=0x12,
+    RX_NUM_BYTES=0x13,
   };
 
   enum class op_reg : uint8_t
@@ -64,6 +65,7 @@ public:
   uint8_t reg_read(register_t register_);
   void reg_write(register_t register_, uint8_t value);
   void send(const uint8_t* buffer, size_t len, int timeout);
+  size_t recv(const uint8_t* buffer);
   bool channel_active();
 
 private:

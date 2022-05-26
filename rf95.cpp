@@ -184,6 +184,29 @@ void RF95::send(const uint8_t *buffer, size_t len, int timeout) {
   }
 }
 
+size_t RF95::recv(const uint8_t *buffer)
+{
+  xEventGroupClearBits(
+    _irq_event_group,
+    IRQ_BIT
+    );
+  mode(RX);
+  const auto bits = xEventGroupWaitBits(
+    _irq_event_group,
+    IRQ_BIT,
+    pdFALSE,
+    pdFALSE,
+    10000 / portTICK_PERIOD_MS);
+
+  mode(IDLE);
+
+  if(bits)
+  {
+    return reg_read(register_t::RX_NUM_BYTES);
+  }
+  return 0;
+}
+
 
 void RF95::modem_config(const std::array<uint8_t, 3>& config)
 {
@@ -247,6 +270,14 @@ void RF95::mode(mode_t mode)
     // Clear IRQs
     reg_write(register_t::IRQ_FLAGS, 0xFF);
     reg_write(register_t::OP_MODE, uint8_t(op_reg::TX));
+    break;
+  case RX:
+    // According to table 18, this should give us RX done on DIO0, the only pin
+    // broken out to the ESP.
+    reg_write(register_t::DIO_MAPPING_1, 0b00 << 6);
+    // Clear IRQs
+    reg_write(register_t::IRQ_FLAGS, 0xFF);
+    reg_write(register_t::OP_MODE, uint8_t(op_reg::RX));
     break;
   case CAD:
     // According to table 18, this should give us CAD done on DIO0, the only pin
