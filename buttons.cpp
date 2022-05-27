@@ -8,14 +8,13 @@
 #include <esp_timer.h>
 #include <esp_event.h>
 #include <esp_event_base.h>
+#include <esp_log.h>
 
 #include <unordered_map>
 #include <stdint.h>
 #include <list>
 #include <map>
 
-//#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
-#include "esp_log.h"
 
 namespace deets::buttons {
 
@@ -26,22 +25,41 @@ namespace {
 ESP_EVENT_DEFINE_BASE(DEETS_BUTTON_EVENTS);
 
 
-std::unordered_map<int, uint64_t> s_debounces;
+std::unordered_map<gpio_num_t, gpio_config_t> s_button_configs;
 
 std::map<gpio_num_t, std::list<std::function<void(gpio_num_t)>>> s_button_callbacks;
 std::unordered_map<int, uint64_t> s_last;
 
 void IRAM_ATTR gpio_isr_handler(void* arg)
 {
-  int pin = (int)arg;
+  const auto pin = gpio_num_t((int)arg);
+  const auto& button_config = s_button_configs[pin];
   int64_t ts = esp_timer_get_time();
-  if(s_last.count(pin) && s_last[pin] + s_debounces[pin] > ts)
+  if(s_last.count(pin) && s_last[pin] + button_config.debounce > ts)
   {
     return;
   }
   s_last[pin] = ts;
-  esp_event_post(
-    DEETS_BUTTON_EVENTS, pin, nullptr, 0, 0);
+  if(const auto event_group_config = std::get_if<event_group_config_t>(&button_config.callback_config))
+  {
+    BaseType_t xHigherPriorityTaskWoken, xResult;
+    xHigherPriorityTaskWoken = pdFALSE;
+    xResult = xEventGroupSetBitsFromISR(
+                         event_group_config->group,
+                         event_group_config->bits,
+                         &xHigherPriorityTaskWoken );
+
+     // Was the message posted successfully?
+     if( xResult == pdPASS )
+     {
+         portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+     }
+  }
+  else
+  {
+    esp_event_post(
+      DEETS_BUTTON_EVENTS, pin, nullptr, 0, 0);
+  }
 }
 
 void s_button_event_handler(void *event_handler_arg,
@@ -60,10 +78,9 @@ void register_isr_handler()
 {
   static bool registered = false;
   // install global GPIO ISR handler
-  ESP_LOGD(TAG, "Enable ISR service");
-
   if(!registered)
   {
+    ESP_LOGD(TAG, "Enable ISR service");
     gpio_install_isr_service(0);
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
                       DEETS_BUTTON_EVENTS,
@@ -113,7 +130,7 @@ void setup_pin(const gpio_config_t& pin)
   }
   //fill map to avoid allocates in ISR
   s_last[pin.num] = esp_timer_get_time();
-  s_debounces[pin.num] = pin.debounce;
+  s_button_configs[pin.num] = pin;
 }
 
 void setup(std::initializer_list<gpio_config_t> config)
@@ -127,7 +144,14 @@ void setup(std::initializer_list<gpio_config_t> config)
 void register_button_callback(gpio_num_t e,
                               std::function<void(gpio_num_t)> cb)
 {
-  s_button_callbacks[e].push_back(cb);
+  if(std::get_if<std::monostate>(&s_button_configs[e].callback_config))
+  {
+    s_button_callbacks[e].push_back(cb);
+  }
+  else
+  {
+    ESP_LOGE(TAG, "Tried setting a callback on an event group button");
+  }
 }
 
 } // namespace deets::buttons

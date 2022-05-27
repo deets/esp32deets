@@ -107,17 +107,10 @@ RF95::RF95(spi_host_device_t spi_host, gpio_num_t cs, gpio_num_t sck,
       irq,
       deets::buttons::pull_e::DOWN,
       deets::buttons::irq_e::POS,
-      0
+      0,
+      deets::buttons::event_group_config_t{ _irq_event_group, IRQ_BIT }
     }
     );
-  deets::buttons::register_button_callback(
-    gpio_num_t(26),
-    [this](gpio_num_t) {
-      xEventGroupSetBits(_irq_event_group, IRQ_BIT);
-    }
-    );
-
-
   setup();
 }
 
@@ -183,9 +176,10 @@ void RF95::send(const uint8_t *buffer, size_t len, int timeout) {
   }
   else
   {
-    ESP_LOGI(TAG, "TX acknowledged by IRQ");
+    ESP_LOGD(TAG, "TX acknowledged by IRQ");
   }
 }
+
 
 size_t RF95::recv(std::array<uint8_t, FIFO_SIZE>& buffer)
 {
