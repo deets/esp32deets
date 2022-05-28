@@ -19,6 +19,8 @@
 #define RH_RF95_PA_SELECT 0x80
 #define RH_RF95_FIFO_SIZE 0xff
 #define RH_RF95_CAD_DETECTED 0x01
+#define RH_RF95_RX_DONE_MASK 0x40
+#define RH_RF95_VALID_HEADER_MASK 0x10
 
 #define IRQ_BIT (1 << 0)
 
@@ -195,13 +197,19 @@ size_t RF95::recv(std::array<uint8_t, FIFO_SIZE>& buffer)
     pdFALSE,
     10000 / portTICK_PERIOD_MS);
 
+  const auto irq_flags = reg_read(register_t::IRQ_FLAGS);
+  ESP_LOGD(TAG, "recv::irq_flags: %02x", irq_flags);
   mode(IDLE);
-
-  if(bits)
+  // See RegIrqFlags: RxDone and ValidHeader need to be set for a successful
+  // reception.
+  if(bits && irq_flags == (RH_RF95_RX_DONE_MASK | RH_RF95_VALID_HEADER_MASK))
   {
     const auto bytes_read = reg_read(register_t::RX_NUM_BYTES);
-    reg_write(register_t::FIFO_ADDR_PTR, reg_read(register_t::FIFO_RX_CURRENT_ADDR));
-    buffer_read(register_t::FIFO, buffer.data(), bytes_read);
+    if(bytes_read)
+    {
+      reg_write(register_t::FIFO_ADDR_PTR, reg_read(register_t::FIFO_RX_CURRENT_ADDR));
+      buffer_read(register_t::FIFO, buffer.data(), bytes_read);
+    }
     return bytes_read;
   }
   return 0;
