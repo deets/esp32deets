@@ -208,6 +208,12 @@ size_t RF95::recv(std::array<uint8_t, FIFO_SIZE>& buffer)
 }
 
 
+void RF95::sync_word(uint8_t sync_word)
+{
+  reg_write(register_t::SYNC_WORD, sync_word);
+}
+
+
 void RF95::modem_config(const std::array<uint8_t, 3>& config)
 {
   reg_write(register_t::MODEM_CONFIG_1, config[0]);

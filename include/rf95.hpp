@@ -57,6 +57,7 @@ public:
     IRQ_MASK=0x11,
     IRQ_FLAGS=0x12,
 
+    SYNC_WORD=0x39,
   };
 
   enum class op_reg : uint8_t
@@ -79,6 +80,7 @@ public:
   void send(const uint8_t* buffer, size_t len, int timeout);
   size_t recv(std::array<uint8_t, FIFO_SIZE>&);
   bool channel_active();
+  void sync_word(uint8_t);
 
 private:
   void mode(mode_t mode);
