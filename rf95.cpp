@@ -54,7 +54,7 @@ uint8_t operator | (const RF95::op_reg& left, const RF95::op_reg& right)
 }
 
 RF95::RF95(spi_host_device_t spi_host, gpio_num_t cs, gpio_num_t sck,
-           gpio_num_t mosi, gpio_num_t miso, int speed, gpio_num_t irq)
+           gpio_num_t mosi, gpio_num_t miso, int speed, gpio_num_t irq, int dbm)
   : _spi_host(spi_host)
 {
   int res;
@@ -113,14 +113,14 @@ RF95::RF95(spi_host_device_t spi_host, gpio_num_t cs, gpio_num_t sck,
       deets::buttons::event_group_config_t{ _irq_event_group, IRQ_BIT }
     }
     );
-  setup();
+  setup(dbm);
 }
 
 
 RF95::~RF95() {}
 
 
-void RF95::setup()
+void RF95::setup(int dbm)
 {
   // This is based on the RadioHead library
   // Sleep, and set LoRa operation mode
@@ -140,7 +140,7 @@ void RF95::setup()
   modem_config({ 0x72, 0x74, 0x04});
   preamble_length(8);
   frequency(868.0);
-  tx_power(13);
+  tx_power(dbm);
 }
 
 
@@ -250,6 +250,7 @@ void RF95::tx_power(int power)
 {
   // Apparently my module only uses the high power
   // output.
+  ESP_LOGD(TAG, "Setting TX power: %d", power);
   assert(power >= 2 && power <= 20);
   if(power > 17)
   {

@@ -72,7 +72,7 @@ public:
     CAD = 0b111,
   };
 
-  RF95(spi_host_device_t spi_host, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio_num_t miso, int speed, gpio_num_t irq);
+  RF95(spi_host_device_t spi_host, gpio_num_t cs, gpio_num_t sck, gpio_num_t mosi, gpio_num_t miso, int speed, gpio_num_t irq, int dbm);
   ~RF95();
 
   uint8_t reg_read(register_t register_);
@@ -81,14 +81,14 @@ public:
   size_t recv(std::array<uint8_t, FIFO_SIZE>&);
   bool channel_active();
   void sync_word(uint8_t);
+  void tx_power(int);
 
 private:
   void mode(mode_t mode);
-  void setup();
+  void setup(int dbm);
   void modem_config(const std::array<uint8_t, 3>& config);
   void preamble_length(uint16_t);
   void frequency(float);
-  void tx_power(int);
   void buffer_write(register_t register_, const uint8_t *buffer, size_t len);
   void buffer_read(register_t register_, uint8_t *buffer, size_t len);
 
