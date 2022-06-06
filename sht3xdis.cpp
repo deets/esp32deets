@@ -45,11 +45,11 @@ float SHT3XDIS::raw2temperature(uint16_t temperature)
 
 RawValues SHT3XDIS::raw_values()
 {
-  _bus.write_buffer_to_address(_address, MEASUREMENT.data(), MEASUREMENT.size());
+  while(_bus.write_buffer_to_address(_address, MEASUREMENT.data(), MEASUREMENT.size()) == ESP_ERR_TIMEOUT) {}
   vTaskDelay(MEASUREMENT_TIME / portTICK_PERIOD_MS);
 
   std::array<uint8_t, 6> buffer;
-  _bus.read_from_address_into_buffer(_address, buffer.data(), buffer.size());
+  while(_bus.read_from_address_into_buffer(_address, buffer.data(), buffer.size()) == ESP_ERR_TIMEOUT) {}
   const auto temp = uint16_t(buffer[0] << 8 | buffer[1]);
   const auto humidity = uint16_t(buffer[3] << 8 | buffer[4]);
   return { humidity, temp };
@@ -67,19 +67,19 @@ Values SHT3XDIS::values()
 
 void SHT3XDIS::reset()
 {
-  _bus.write_buffer_to_address(_address, RESET.data(), RESET.size());
+  while(_bus.write_buffer_to_address(_address, RESET.data(), RESET.size()) == ESP_ERR_TIMEOUT) {}
 }
 
 void SHT3XDIS::clear()
 {
-  _bus.write_buffer_to_address(_address, CLEAR.data(), CLEAR.size());
+  while(_bus.write_buffer_to_address(_address, CLEAR.data(), CLEAR.size()) == ESP_ERR_TIMEOUT) {}
 }
 
 uint16_t SHT3XDIS::status()
 {
-  _bus.write_buffer_to_address(_address, STATUS_.data(), STATUS_.size());
+  while(_bus.write_buffer_to_address(_address, STATUS_.data(), STATUS_.size()) == ESP_ERR_TIMEOUT) {}
   std::array<uint8_t, 3> buffer;
-  _bus.read_from_address_into_buffer(_address, buffer.data(), buffer.size());
+  while(_bus.read_from_address_into_buffer(_address, buffer.data(), buffer.size()) == ESP_ERR_TIMEOUT) {}
   return buffer[0] << 8 | buffer[1];
 }
 

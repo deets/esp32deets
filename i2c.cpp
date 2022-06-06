@@ -3,19 +3,20 @@
 #include <esp_log.h>
 #include <vector>
 
-void print_error(esp_err_t err)
-{
-  if(err == ESP_OK)
-  {
-    return;
-  }
-  char buffer[200];
-  esp_err_to_name_r(err, buffer, sizeof(buffer));
-  ESP_LOGE("i2c", "error: %s", buffer);
-}
+#define TAG "i2c"
 
-I2CHost::I2CHost(i2c_port_t i2c_num, gpio_num_t sda, gpio_num_t scl)
+#define CHECK_AND_RETURN(err) \
+  if(err == ESP_ERR_TIMEOUT) \
+  { \
+    ESP_LOGD(TAG, "Bus timed out, resetting");  \
+  } \
+  return err;                                   \
+
+
+
+I2CHost::I2CHost(i2c_port_t i2c_num, gpio_num_t sda, gpio_num_t scl, int timeout)
   : _i2c_num(i2c_num)
+  , _timeout(timeout / portTICK_RATE_MS)
 {
   i2c_config_t config = {
     .mode=I2C_MODE_MASTER,
@@ -23,6 +24,7 @@ I2CHost::I2CHost(i2c_port_t i2c_num, gpio_num_t sda, gpio_num_t scl)
     .scl_io_num=scl,
     .sda_pullup_en=GPIO_PULLUP_ENABLE,
     .scl_pullup_en=GPIO_PULLUP_ENABLE,
+    .clk_flags=0,
   };
   config.master.clk_speed = 400000;
 
@@ -48,9 +50,8 @@ I2CHost::~I2CHost()
 }
 
 
-uint8_t I2CHost::read_byte_from_register(uint8_t address, uint8_t register_) const
+esp_err_t I2CHost::read_byte_from_register(uint8_t address, uint8_t register_, uint8_t& res) const
 {
-  uint8_t res;
   esp_err_t err;
   // send the request
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
@@ -58,101 +59,97 @@ uint8_t I2CHost::read_byte_from_register(uint8_t address, uint8_t register_) con
   i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_WRITE, 1);
   i2c_master_write_byte(cmd,  register_, 1);
   i2c_master_stop(cmd);
-  err = i2c_master_cmd_begin(_i2c_num, cmd, 1000 / portTICK_RATE_MS);
-  //assert(err == ESP_OK);
+  err = i2c_master_cmd_begin(_i2c_num, cmd, _timeout);
+  if(err != ESP_OK)
+    goto exit;
   i2c_cmd_link_delete(cmd);
   cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
   i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_READ, 1);
   i2c_master_read_byte(cmd, &res, i2c_ack_type_t(1));
   i2c_master_stop(cmd);
-  err = i2c_master_cmd_begin(_i2c_num, cmd, 1000 / portTICK_RATE_MS);
-//  assert(err == ESP_OK);
+  err = i2c_master_cmd_begin(_i2c_num, cmd, _timeout);
+exit:
   i2c_cmd_link_delete(cmd);
-  return res;
+  CHECK_AND_RETURN(err)
 }
 
-void I2CHost::write_byte_to_register(uint8_t address, uint8_t register_, uint8_t value) const
+esp_err_t I2CHost::write_byte_to_register(uint8_t address, uint8_t register_, uint8_t value) const
 {
   esp_err_t err;
-  // send the request
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
   i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_WRITE, 1);
   i2c_master_write_byte(cmd,  register_, 1);
   i2c_master_write_byte(cmd,  value, 1);
   i2c_master_stop(cmd);
-  err = i2c_master_cmd_begin(_i2c_num, cmd, 1000 / portTICK_RATE_MS);
-  // assert(err == ESP_OK);
+  err = i2c_master_cmd_begin(_i2c_num, cmd, _timeout);
   i2c_cmd_link_delete(cmd);
+  CHECK_AND_RETURN(err)
 }
 
-void I2CHost::write_buffer_to_address(uint8_t address, const uint8_t* buffer, size_t len) const
+esp_err_t I2CHost::write_buffer_to_address(uint8_t address, const uint8_t* buffer, size_t len) const
 {
   esp_err_t err;
-  // send the request
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
   i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_WRITE, 1);
   i2c_master_write(cmd, const_cast<uint8_t*>(buffer), len, 1);
   i2c_master_stop(cmd);
-  err = i2c_master_cmd_begin(_i2c_num, cmd, 1000 / portTICK_RATE_MS);
-  // assert(err == ESP_OK);
+  err = i2c_master_cmd_begin(_i2c_num, cmd, _timeout);
   i2c_cmd_link_delete(cmd);
+  CHECK_AND_RETURN(err)
 }
 
-void I2CHost::write_byte(uint8_t address, uint8_t value) const
+esp_err_t I2CHost::write_byte(uint8_t address, uint8_t value) const
 {
   esp_err_t err;
-  // send the request
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
   i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_WRITE, 1);
   i2c_master_write_byte(cmd,  value, 1);
   i2c_master_stop(cmd);
-  err = i2c_master_cmd_begin(_i2c_num, cmd, 1000 / portTICK_RATE_MS);
-  // assert(err == ESP_OK);
+  err = i2c_master_cmd_begin(_i2c_num, cmd, _timeout);
   i2c_cmd_link_delete(cmd);
+  CHECK_AND_RETURN(err)
 }
 
 
-void I2CHost::read_from_device_register_into_buffer(uint8_t address, uint8_t register_, uint8_t* buffer, size_t length) const
+esp_err_t I2CHost::read_from_device_register_into_buffer(uint8_t address, uint8_t register_, uint8_t* buffer, size_t length) const
 {
   esp_err_t err;
-  // send the request
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
   i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_WRITE, 1);
   i2c_master_write_byte(cmd,  register_, 1);
   i2c_master_stop(cmd);
-  err = i2c_master_cmd_begin(_i2c_num, cmd, 1000 / portTICK_RATE_MS);
-  print_error(err);
-  // assert(err == ESP_OK);
+  err = i2c_master_cmd_begin(_i2c_num, cmd, _timeout);
+  if(err != ESP_OK)
+    goto exit;
+
   i2c_cmd_link_delete(cmd);
   cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
   i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_READ, 1);
   i2c_master_read(cmd, buffer, length, I2C_MASTER_LAST_NACK);
   i2c_master_stop(cmd);
-  err = i2c_master_cmd_begin(_i2c_num, cmd, portMAX_DELAY);
-  ESP_ERROR_CHECK(err);
-  // assert(err == ESP_OK);
+  err = i2c_master_cmd_begin(_i2c_num, cmd, _timeout);
+exit:
   i2c_cmd_link_delete(cmd);
+  CHECK_AND_RETURN(err)
 }
 
-void I2CHost::read_from_address_into_buffer(uint8_t address, uint8_t* buffer, size_t length) const
+esp_err_t I2CHost::read_from_address_into_buffer(uint8_t address, uint8_t* buffer, size_t length) const
 {
   esp_err_t err;
-  // send the request
   i2c_cmd_handle_t cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
   i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_READ, 1);
   i2c_master_read(cmd, buffer, length, I2C_MASTER_LAST_NACK);
   i2c_master_stop(cmd);
-  err = i2c_master_cmd_begin(_i2c_num, cmd, portMAX_DELAY);
-  ESP_ERROR_CHECK(err);
-  // assert(err == ESP_OK);
+  err = i2c_master_cmd_begin(_i2c_num, cmd, _timeout);
   i2c_cmd_link_delete(cmd);
+  CHECK_AND_RETURN(err)
 }
 
 std::vector<uint8_t> I2CHost::scan() const
@@ -164,11 +161,17 @@ std::vector<uint8_t> I2CHost::scan() const
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, (address << 1) | I2C_MASTER_WRITE, 1);
     i2c_master_stop(cmd);
-    const auto result = i2c_master_cmd_begin(_i2c_num, cmd, portMAX_DELAY);
+    const auto result = i2c_master_cmd_begin(_i2c_num, cmd, _timeout);
     if(result == ESP_OK)
     {
       res.push_back(address);
     }
   }
   return res;
+}
+
+void I2CHost::reset()
+{
+  i2c_reset_rx_fifo(_i2c_num);
+  i2c_reset_tx_fifo(_i2c_num);
 }
