@@ -15,6 +15,8 @@ class TCA9548A
     esp_err_t write_buffer_to_address(uint8_t address, const uint8_t* buffer, size_t len) const override;
     esp_err_t read_from_device_register_into_buffer(uint8_t address, uint8_t register_, uint8_t* buffer, size_t length) const override;
     esp_err_t read_from_address_into_buffer(uint8_t address, uint8_t *buffer, size_t length) const override;
+    std::lock_guard<std::mutex> lock() override;
+
     std::vector<uint8_t> scan() const override;
 
   private:

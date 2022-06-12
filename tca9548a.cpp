@@ -1,4 +1,5 @@
 #include "tca9548a.hpp"
+#include <mutex>
 
 
 TCA9548A::WrappedBus::WrappedBus(uint8_t busno, TCA9548A &mux, I2C &bus)
@@ -51,6 +52,11 @@ esp_err_t TCA9548A::WrappedBus::read_from_address_into_buffer(uint8_t address, u
   return _bus.read_from_address_into_buffer(address, buffer, length);
 }
 
+std::lock_guard<std::mutex> TCA9548A::WrappedBus::lock()
+{
+  return _bus.lock();
+}
+
 std::vector<uint8_t> TCA9548A::WrappedBus::scan() const
 {
   _mux.select(_busno);
@@ -71,6 +77,7 @@ void TCA9548A::select(uint8_t busno)
 {
   if(_selected_bus != busno)
   {
+    auto lock = _bus.lock();
     _bus.write_byte(_address, 1 << busno);
     _selected_bus = busno;
   }

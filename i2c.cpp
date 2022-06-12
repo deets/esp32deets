@@ -175,3 +175,9 @@ void I2CHost::reset()
   i2c_reset_rx_fifo(_i2c_num);
   i2c_reset_tx_fifo(_i2c_num);
 }
+
+
+std::lock_guard<std::mutex> I2CHost::lock()
+{
+  return std::lock_guard<std::mutex>(_mutex);
+}
