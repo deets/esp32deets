@@ -45,6 +45,7 @@ float SHT3XDIS::raw2temperature(uint16_t temperature)
 
 RawValues SHT3XDIS::raw_values()
 {
+  auto lock = _bus.lock();
   while(_bus.write_buffer_to_address(_address, MEASUREMENT.data(), MEASUREMENT.size()) == ESP_ERR_TIMEOUT) {}
   vTaskDelay(MEASUREMENT_TIME / portTICK_PERIOD_MS);
 
@@ -67,16 +68,19 @@ Values SHT3XDIS::values()
 
 void SHT3XDIS::reset()
 {
+  auto lock = _bus.lock();
   while(_bus.write_buffer_to_address(_address, RESET.data(), RESET.size()) == ESP_ERR_TIMEOUT) {}
 }
 
 void SHT3XDIS::clear()
 {
+  auto lock = _bus.lock();
   while(_bus.write_buffer_to_address(_address, CLEAR.data(), CLEAR.size()) == ESP_ERR_TIMEOUT) {}
 }
 
 uint16_t SHT3XDIS::status()
 {
+  auto lock = _bus.lock();
   while(_bus.write_buffer_to_address(_address, STATUS_.data(), STATUS_.size()) == ESP_ERR_TIMEOUT) {}
   std::array<uint8_t, 3> buffer;
   while(_bus.read_from_address_into_buffer(_address, buffer.data(), buffer.size()) == ESP_ERR_TIMEOUT) {}
