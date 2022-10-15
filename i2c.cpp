@@ -18,7 +18,7 @@ I2CHost::I2CHost(i2c_port_t i2c_num, gpio_num_t sda, gpio_num_t scl, int timeout
   : _i2c_num(i2c_num)
   , _timeout(timeout / portTICK_RATE_MS)
 {
-  i2c_config_t config = {
+  _config = i2c_config_t {
     .mode=I2C_MODE_MASTER,
     .sda_io_num=sda,
     .scl_io_num=scl,
@@ -26,12 +26,10 @@ I2CHost::I2CHost(i2c_port_t i2c_num, gpio_num_t sda, gpio_num_t scl, int timeout
     .scl_pullup_en=GPIO_PULLUP_ENABLE,
     .clk_flags=0,
   };
-  config.master.clk_speed = 400000;
+  // implicitly configures the
+  // bus
+  auto err = set_speed(400000);
 
-  auto err = i2c_param_config(
-    i2c_num,
-    &config
-    );
   assert(err == ESP_OK);
 
   err = i2c_driver_install(
@@ -49,6 +47,14 @@ I2CHost::~I2CHost()
   i2c_driver_delete(_i2c_num);
 }
 
+esp_err_t I2CHost::set_speed(int speed)
+{
+  _config.master.clk_speed = speed;
+  return i2c_param_config(
+    _i2c_num,
+    &_config
+    );
+}
 
 esp_err_t I2CHost::read_byte_from_register(uint8_t address, uint8_t register_, uint8_t& res) const
 {
