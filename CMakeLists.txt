@@ -1,6 +1,7 @@
 set(
   srcs
   wifi.cpp
+  eventloop.cpp
   flash.cpp
   smartconfig.cpp
   buttons.cpp

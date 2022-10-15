@@ -1,4 +1,7 @@
+// Copyright: 2022, Diez B. Roggisch, Berlin, all rights reserved
+
 #include "deets/wifi.hpp"
+#include "deets/eventloop.hpp"
 #include "flash.hpp"
 
 #include <string.h>
@@ -139,7 +142,7 @@ void setup()
   {
     s_initialized = true;
 
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    deets::eventloop::init();
     deets::flash::init();
 
     s_wifi_event_group = xEventGroupCreate();
