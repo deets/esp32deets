@@ -11,9 +11,6 @@
 #include <mutex>
 
 
-void print_error(esp_err_t err);
-
-
 class I2C {
 public:
   using mutex_type = std::recursive_mutex;
