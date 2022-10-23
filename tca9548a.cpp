@@ -52,7 +52,7 @@ esp_err_t TCA9548A::WrappedBus::read_from_address_into_buffer(uint8_t address, u
   return _bus.read_from_address_into_buffer(address, buffer, length);
 }
 
-std::lock_guard<std::mutex> TCA9548A::WrappedBus::lock()
+std::lock_guard<TCA9548A::WrappedBus::mutex_type> TCA9548A::WrappedBus::lock()
 {
   return _bus.lock();
 }

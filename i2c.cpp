@@ -183,7 +183,7 @@ void I2CHost::reset()
 }
 
 
-std::lock_guard<std::mutex> I2CHost::lock()
+std::lock_guard<I2CHost::mutex_type> I2CHost::lock()
 {
-  return std::lock_guard<std::mutex>(_mutex);
+  return std::lock_guard<mutex_type>(_mutex);
 }

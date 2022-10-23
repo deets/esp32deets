@@ -16,13 +16,15 @@ void print_error(esp_err_t err);
 
 class I2C {
 public:
+  using mutex_type = std::recursive_mutex;
+
   virtual esp_err_t write_byte(uint8_t address, uint8_t value) const = 0;
   virtual esp_err_t read_byte_from_register(uint8_t address, uint8_t register_, uint8_t& res) const = 0;
   virtual esp_err_t write_byte_to_register(uint8_t address, uint8_t register_, uint8_t value) const = 0;
   virtual esp_err_t write_buffer_to_address(uint8_t address, const uint8_t* buffer, size_t len) const = 0;
   virtual esp_err_t read_from_device_register_into_buffer(uint8_t address, uint8_t register_, uint8_t* buffer, size_t length) const = 0;
   virtual esp_err_t read_from_address_into_buffer(uint8_t address, uint8_t* buffer, size_t length) const = 0;
-  virtual std::lock_guard<std::mutex> lock() = 0;
+  virtual std::lock_guard<mutex_type> lock() = 0;
 
   template<typename T>
   esp_err_t read_from_device_register_into_buffer(uint8_t address, uint8_t register_, T& data) const
@@ -37,6 +39,8 @@ public:
 class I2CHost : public I2C
 {
 public:
+  using mutex_type = I2C::mutex_type;
+
   I2CHost(i2c_port_t i2c_num, gpio_num_t sda, gpio_num_t scl, int timeout=100);
   ~I2CHost();
 
@@ -47,7 +51,7 @@ public:
   esp_err_t write_buffer_to_address(uint8_t address, const uint8_t* buffer, size_t len) const override;
   esp_err_t read_from_device_register_into_buffer(uint8_t address, uint8_t register_, uint8_t* buffer, size_t length) const override;
   esp_err_t read_from_address_into_buffer(uint8_t address, uint8_t* buffer, size_t length) const override;
-  std::lock_guard<std::mutex> lock() override;
+  std::lock_guard<mutex_type> lock() override;
 
   std::vector<uint8_t> scan() const override;
   void reset();
@@ -57,5 +61,5 @@ private:
   i2c_port_t _i2c_num;
   intr_handle_t _i2c_intr_handle;
   TickType_t _timeout;
-  std::mutex _mutex;
+  mutex_type _mutex;
 };
