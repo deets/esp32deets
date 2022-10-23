@@ -10,6 +10,7 @@
 #include <vector>
 #include <mutex>
 
+namespace deets::i2c {
 
 class I2C {
 public:
@@ -60,3 +61,5 @@ private:
   TickType_t _timeout;
   mutex_type _mutex;
 };
+
+} // namespace deets::i2c

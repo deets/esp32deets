@@ -1,5 +1,5 @@
 // Copyright: 2020, Diez B. Roggisch, Berlin, all rights reserved
-#include "i2c.hh"
+#include "deets/i2c.hpp"
 #include <esp_log.h>
 #include <vector>
 
@@ -10,9 +10,10 @@
   { \
     ESP_LOGD(TAG, "Bus timed out, resetting");  \
   } \
-  return err;                                   \
+  return err;
 
 
+namespace deets::i2c {
 
 I2CHost::I2CHost(i2c_port_t i2c_num, gpio_num_t sda, gpio_num_t scl, int timeout)
   : _i2c_num(i2c_num)
@@ -187,3 +188,5 @@ std::lock_guard<I2CHost::mutex_type> I2CHost::lock()
 {
   return std::lock_guard<mutex_type>(_mutex);
 }
+
+} // namespace deets::i2c

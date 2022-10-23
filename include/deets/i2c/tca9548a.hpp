@@ -2,8 +2,10 @@
 
 #pragma once
 
-#include "i2c.hh"
+#include "deets/i2c.hpp"
 #include <array>
+
+namespace deets::i2c {
 
 class TCA9548A
 {
@@ -44,3 +46,5 @@ private:
   uint8_t _selected_bus;
   I2C& _bus;
 };
+
+} // namespace deets::i2c

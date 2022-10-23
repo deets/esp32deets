@@ -1,10 +1,12 @@
 // Copyright: 2021, Diez B. Roggisch, Berlin, all rights reserved
 
-#include "sht3xdis.hpp"
+#include "deets/i2c/sht3xdis.hpp"
 
-#include "i2c.hh"
+#include "deets/i2c.hpp"
 
 #include <array>
+
+namespace deets::i2c {
 
 namespace sht3xdis {
 
@@ -95,4 +97,6 @@ Values Values::from_raw(const RawValues &raw)
   };
 }
 
-}
+} // namespace sht3xdis
+
+} // namespace deets::i2c

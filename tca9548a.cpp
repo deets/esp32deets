@@ -1,6 +1,7 @@
-#include "tca9548a.hpp"
+#include "deets/i2c/tca9548a.hpp"
 #include <mutex>
 
+namespace deets::i2c {
 
 TCA9548A::WrappedBus::WrappedBus(uint8_t busno, TCA9548A &mux, I2C &bus)
   : _busno(busno)
@@ -82,3 +83,5 @@ void TCA9548A::select(uint8_t busno)
     _selected_bus = busno;
   }
 }
+
+} // namespace deets::i2c

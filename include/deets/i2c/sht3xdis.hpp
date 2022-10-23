@@ -4,6 +4,8 @@
 
 #include <cinttypes>
 
+namespace deets::i2c {
+
 class I2C;
 
 namespace sht3xdis {
@@ -44,4 +46,6 @@ private:
   uint8_t _address;
 };
 
-}
+} // namespace sht3xdis
+
+} // namespace deets::i2c
