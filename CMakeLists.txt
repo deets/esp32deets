@@ -1,17 +1,30 @@
+# This file has a problem, see:
+#
+#  https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-guides/build-system.html#component-requirements
+#
+# It can't build a requirements list depending on the config choices. Need to figure out what todo about that.
+
 set(
   srcs
-  wifi.cpp
-  eventloop.cpp
-  flash.cpp
-  smartconfig.cpp
-  buttons.cpp
   )
 
-set(requirements nvs_flash)
+if(CONFIG_DEETS_USE_WIFI)
+  list(APPEND srcs
+    eventloop.cpp
+    smartconfig.cpp
+    wifi.cpp
+    flash.cpp
+  )
+endif()
+
+if(CONFIG_DEETS_USE_BUTTONS)
+  list(APPEND srcs
+    buttons.cpp
+  )
+endif()
 
 if(CONFIG_DEETS_USE_U8G2)
-  list(APPEND srcs u8g2_esp32_hal.c ssd1306.c)
-  # APPEND requirements u8g2
+  list(APPEND srcs u8g2_esp32_hal.c)
 endif()
 
 if(CONFIG_DEETS_USE_MPU6050)
@@ -52,5 +65,7 @@ idf_component_register(
   .
   SRCS ${srcs}
   INCLUDE_DIRS "include"
-  REQUIRES "esp_http_server ${requirements}"
+  REQUIRES "driver"
   )
+
+target_compile_definitions(${COMPONENT_LIB} PUBLIC U8X8_WITH_USER_PTR)

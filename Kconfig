@@ -1,5 +1,16 @@
 menu "deets ESP32 library"
 
+config DEETS_USE_WIFI
+  string "Use WIFI"
+  default n
+  help
+    Add WIFI helpers
+
+config DEETS_USE_BUTTONS
+  string "Use buttons"
+  default n
+  help
+    Add button code
 
 config DEETS_WIFI_NETWORK_CONFIG
    string "Network configuration"

@@ -1,16 +1,28 @@
 // Copyright: 2020, Diez B. Roggisch, Berlin, all rights reserved
+#include "driver/i2c_types.h"
+#include "esp_err.h"
+#include <cstdint>
 #include <sdkconfig.h>
 #ifndef CONFIG_DEETS_USE_I2C
 #error "CONFIG_DEETS_USE_I2C not set!"
 #endif
 #pragma once
 
-#include <driver/i2c.h>
+#include <driver/i2c_master.h>
 
 #include <vector>
 #include <mutex>
 
 namespace deets::i2c {
+class I2C;
+
+class I2CDevice {
+public:
+  I2CDevice(I2C& host, uint8_t addr, uint32_t speed=400000);
+private:
+
+  i2c_master_dev_handle_t _handle;
+};
 
 class I2C {
 public:
@@ -22,6 +34,8 @@ public:
   virtual esp_err_t write_buffer_to_address(uint8_t address, const uint8_t* buffer, size_t len) const = 0;
   virtual esp_err_t read_from_device_register_into_buffer(uint8_t address, uint8_t register_, uint8_t* buffer, size_t length) const = 0;
   virtual esp_err_t read_from_address_into_buffer(uint8_t address, uint8_t* buffer, size_t length) const = 0;
+  virtual esp_err_t add_device(i2c_device_config_t*, i2c_master_dev_handle_t*) const = 0;
+
   virtual std::lock_guard<mutex_type> lock() = 0;
 
   template<typename T>
@@ -49,16 +63,21 @@ public:
   esp_err_t write_buffer_to_address(uint8_t address, const uint8_t* buffer, size_t len) const override;
   esp_err_t read_from_device_register_into_buffer(uint8_t address, uint8_t register_, uint8_t* buffer, size_t length) const override;
   esp_err_t read_from_address_into_buffer(uint8_t address, uint8_t* buffer, size_t length) const override;
+  esp_err_t add_device(i2c_device_config_t*, i2c_master_dev_handle_t*) const override;
   std::lock_guard<mutex_type> lock() override;
 
   std::vector<uint8_t> scan() const override;
   void reset();
 
+  i2c_master_bus_handle_t handle() const {
+    return _handle;
+  }
 private:
-  i2c_config_t _config;
-  i2c_port_t _i2c_num;
-  intr_handle_t _i2c_intr_handle;
-  TickType_t _timeout;
+  friend class I2CDevice;
+
+  i2c_master_bus_config_t _config;
+  i2c_master_bus_handle_t _handle;
+//  TickType_t _timeout;
   mutex_type _mutex;
 };
 
